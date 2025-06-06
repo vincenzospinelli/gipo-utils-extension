@@ -42,7 +42,7 @@ if (!document.getElementById("gipo-timer-widget")) {
              class="absolute left-1/2 top-1/2 w-0.5 h-12 bg-red-500 origin-top -translate-x-1/2 -translate-y-1/2 z-0"
              style="transform: rotate(-180deg);"></div>
       </div>
-      <div id="current-person" class="font-semibold text-center text-base"></div>
+      <div id="current-person" class="font-semibold text-center text-xl"></div>
       <div id="gipo-timer-display" class="text-2xl font-mono"></div>
       <div class="flex gap-2 flex-wrap justify-center">
         <button class="gipo-button" id="prev-person">⏮</button>

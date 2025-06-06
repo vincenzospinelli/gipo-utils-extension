@@ -110,7 +110,7 @@ function drawWheel(names) {
 
     ctx.save();
     ctx.rotate(i * step + step / 2);
-    ctx.translate(radius * 0.8, 0); // più lontano dal centro
+    ctx.translate(radius * 0.8, 0);
     ctx.rotate(Math.PI / 2);
     ctx.fillStyle = "#000";
     ctx.font = "bold 14px sans-serif";
@@ -201,7 +201,7 @@ document.getElementById("wheel-shuffle").addEventListener("click", () => {
     .map((n) => n.trim())
     .filter(Boolean);
 
-  // Algoritmo di Fisher-Yates per mischiare la lista
+  // Algoritmo per mischiare la lista
   for (let i = names.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [names[i], names[j]] = [names[j], names[i]];
