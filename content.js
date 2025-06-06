@@ -28,20 +28,23 @@ function makeDraggable(element) {
 }
 
 if (!document.getElementById("gipo-timer-widget")) {
-  // DOM Setup
-  const container = document.createElement("div");
-  container.id = "gipo-timer-widget";
-  container.innerHTML = `
-    <div class="gipo-timer-container"> 
-      <div class="clock">
-        <div class="hand minute" id="minute-hand"></div>
-        <div class="hand second" id="second-hand"></div>
+  // === DOM Setup ===
+
+  // Timer HTML markupπ
+  const TIMER_HTML = `
+    <div class="flex flex-col items-center gap-4 p-4 bg-white dark:bg-gray-800 shadow-lg rounded-lg text-gray-800 dark:text-white text-sm">
+      <div class="w-24 h-24 rounded-full border-4 border-black dark:border-white relative">
+        <!-- centro -->
+        <div class="absolute w-2 h-2 bg-black dark:bg-white rounded-full top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10"></div>
+
+        <!-- lancetta dei secondi -->
+        <div id="second-hand"
+             class="absolute left-1/2 top-1/2 w-0.5 h-12 bg-red-500 origin-top -translate-x-1/2 -translate-y-1/2 z-0"
+             style="transform: rotate(-180deg);"></div>
       </div>
-      <div class="person-display" id="current-person"></div>
-      <div class="gipo-timer">
-        <div id="gipo-timer-display">00:00:00</div> 
-      </div>
-      <div class="gipo-timer-options">
+      <div id="current-person" class="font-semibold text-center text-base"></div>
+      <div id="gipo-timer-display" class="text-2xl font-mono"></div>
+      <div class="flex gap-2 flex-wrap justify-center">
         <button class="gipo-button" id="prev-person">⏮</button>
         <button class="gipo-button" id="start-timer">▶</button>
         <button class="gipo-button" id="stop-timer">⏸</button>
@@ -52,11 +55,52 @@ if (!document.getElementById("gipo-timer-widget")) {
       </div>
     </div>
   `;
+
+  // Create container element
+  const container = document.createElement("div");
+  container.id = "gipo-timer-widget";
+  container.style.right = "16px";
+  container.style.bottom = "16px";
+  container.style.position = "fixed";
+  container.style.zIndex = "9999";
+
+  // Set inner HTML
+  container.innerHTML = TIMER_HTML;
+
+  // Create and append audio element
+  const audio = document.createElement("audio");
+  audio.src = chrome.runtime.getURL("assets/sounds/beep.mp3");
+  audio.id = "beep-sound";
+  audio.preload = "auto";
+  container.appendChild(audio);
+
+  // Append container to body
   document.body.appendChild(container);
+  // Imposta subito il display a 00:00:00 per renderlo visibile
+  document.getElementById("gipo-timer-display").textContent = "00:00:00";
 
-  makeDraggable(container);
+  // === Utility functions ===
 
-  // Timer Logic
+  const playBeep = () => {
+    const beep = document.getElementById("beep-sound");
+    if (beep) {
+      beep.currentTime = 0;
+      beep
+        .play()
+        .catch((e) => console.warn("Impossibile riprodurre il suono:", e));
+    }
+  };
+
+  const format = (ms) => {
+    const sec = Math.floor(ms / 1000);
+    const h = String(Math.floor(sec / 3600)).padStart(2, "0");
+    const m = String(Math.floor((sec % 3600) / 60)).padStart(2, "0");
+    const s = String(sec % 60).padStart(2, "0");
+    return `${h}:${m}:${s}`;
+  };
+
+  // === Timer Logic ===
+
   let personList = [];
   let currentIndex = 0;
   let timerDuration = 60;
@@ -67,41 +111,37 @@ if (!document.getElementById("gipo-timer-widget")) {
     "Alessandro\nClaudio\nDiego\nElisa\nFedeD\nFedeG\nFrancesco\nGabriele\nLuca\nMatteo\nNicola\nRoberto\nStefano\nVincenzo";
   const defaultDuration = 60;
 
-  const format = (ms) => {
-    const sec = Math.floor(ms / 1000);
-    const h = String(Math.floor(sec / 3600)).padStart(2, "0");
-    const m = String(Math.floor((sec % 3600) / 60)).padStart(2, "0");
-    const s = String(sec % 60).padStart(2, "0");
-    return `${h}:${m}:${s}`;
-  };
-
   const updateDisplay = () => {
     const remaining = startTime - Date.now();
     if (remaining <= 0) {
       clearInterval(intervalId);
       intervalId = null;
       document.getElementById("gipo-timer-display").textContent = "00:00:00";
+
+      const sound = document.getElementById("timer-end-sound");
+      if (sound) {
+        sound
+          .play()
+          .catch((e) => console.warn("Impossibile riprodurre il suono:", e));
+      }
+
       return;
     }
     document.getElementById("gipo-timer-display").textContent =
       format(remaining);
   };
 
-  // UI Updates
-  const updateClock = () => {
-    const now = new Date();
-    const seconds = now.getSeconds();
-    const minutes = now.getMinutes();
+  // === UI Updates ===
 
-    const secondDeg = seconds * 6;
-    const minuteDeg = minutes * 6 + seconds * 0.1;
+  const updateClock = () => {
+    if (!startTime) return;
+    const remaining = startTime - Date.now();
+    const secondsRemaining = Math.max(0, Math.floor(remaining / 1000));
+    const secondDeg = (60 - secondsRemaining) * 6 - 180;
 
     const secHand = document.getElementById("second-hand");
-    const minHand = document.getElementById("minute-hand");
-
-    if (secHand && minHand) {
+    if (secHand) {
       secHand.style.transform = `rotate(${secondDeg}deg)`;
-      minHand.style.transform = `rotate(${minuteDeg}deg)`;
     }
   };
 
@@ -114,10 +154,8 @@ if (!document.getElementById("gipo-timer-widget")) {
     }
   };
 
-  setInterval(updateClock, 1000);
-  updateClock();
+  // === Configuration ===
 
-  // Configuration
   const loadConfiguration = () => {
     chrome.storage.sync.get(["people", "duration"], (data) => {
       const people = data.people || defaultPeople;
@@ -132,7 +170,8 @@ if (!document.getElementById("gipo-timer-widget")) {
     });
   };
 
-  // Event Listeners
+  // === Event Listeners ===
+
   const changePerson = (increment) => {
     if (personList.length > 0) {
       currentIndex =
@@ -145,20 +184,39 @@ if (!document.getElementById("gipo-timer-widget")) {
         clearInterval(intervalId);
         intervalId = null;
         startTime = Date.now() + timerDuration * 1000;
-        intervalId = setInterval(updateDisplay, 1000);
+        document.getElementById("gipo-timer-display").textContent = "00:00:00";
+        const secHand = document.getElementById("second-hand");
+        if (secHand) {
+          secHand.style.transform = "rotate(-180deg)";
+        }
+        intervalId = setInterval(() => {
+          updateDisplay();
+          updateClock();
+        }, 1000);
       });
     }
   };
 
   document.getElementById("start-timer").onclick = () => {
+    playBeep();
     if (intervalId) return;
     startTime = startTime || Date.now() + timerDuration * 1000;
-    intervalId = setInterval(updateDisplay, 1000);
+    intervalId = setInterval(() => {
+      updateDisplay();
+      updateClock();
+    }, 1000);
   };
 
   document.getElementById("stop-timer").onclick = () => {
+    playBeep();
     clearInterval(intervalId);
     intervalId = null;
+    startTime = null;
+    document.getElementById("gipo-timer-display").textContent = "00:00:00";
+    const secHand = document.getElementById("second-hand");
+    if (secHand) {
+      secHand.style.transform = "rotate(-180deg)";
+    }
   };
 
   document.getElementById("reset-timer").onclick = () => {
@@ -166,13 +224,27 @@ if (!document.getElementById("gipo-timer-widget")) {
     intervalId = null;
     startTime = null;
     document.getElementById("gipo-timer-display").textContent = "00:00:00";
+    const secHand = document.getElementById("second-hand");
+    if (secHand) {
+      secHand.style.transform = "rotate(-180deg)";
+    }
   };
 
-  document.getElementById("prev-person").onclick = () => changePerson(-1);
-  document.getElementById("next-person").onclick = () => changePerson(1);
+  document.getElementById("prev-person").onclick = () => {
+    playBeep();
+    changePerson(-1);
+  };
+  document.getElementById("next-person").onclick = () => {
+    playBeep();
+    changePerson(1);
+  };
 
   document.getElementById("open-settings").onclick = () => {
-    chrome.runtime.sendMessage({action: "open-options"});
+    if (typeof chrome !== "undefined" && chrome.runtime?.sendMessage) {
+      chrome.runtime.sendMessage({action: "open-options"});
+    } else {
+      console.warn("chrome.runtime non disponibile");
+    }
   };
 
   document.getElementById("toggle-theme").onclick = () => {
@@ -189,6 +261,8 @@ if (!document.getElementById("gipo-timer-widget")) {
       newTheme === "dark" ? "🌙" : "☀️";
   };
 
+  // === Initial calls ===
+
   chrome.storage.sync.get("theme", (data) => {
     const theme = data.theme || "dark";
     container.classList.add(theme);
@@ -197,4 +271,6 @@ if (!document.getElementById("gipo-timer-widget")) {
   });
 
   loadConfiguration();
+
+  makeDraggable(container);
 }

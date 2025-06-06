@@ -1,9 +1,22 @@
-// Valori di default per la lista di persone e la durata del timer
+// === Costanti e variabili globali ===
 const defaultPeople =
   "Alessandro\nClaudio\nDiego\nElisa\nFedeD\nFedeG\nFrancesco\nGabriele\nLuca\nMatteo\nNicola\nRoberto\nStefano\nVincenzo";
 const defaultDuration = 60;
+const canvas = document.getElementById("wheel-canvas");
+const ctx = canvas.getContext("2d");
+const spinBtn = document.getElementById("spin");
+const winnerDisplay = document.getElementById("winner");
+const confettiCanvas = document.getElementById("confetti-canvas");
+const confettiCtx = confettiCanvas.getContext("2d");
 
-// Inizializzazione della pagina al caricamento
+let spinning = false;
+let angle = 0;
+let angularVelocity = 0;
+let selectedPerson = null;
+let selectedIndex = -1;
+let confettiParticles = [];
+
+// === Inizializzazione pagina ===
 window.addEventListener("DOMContentLoaded", () => {
   chrome.storage.sync.get(["people", "duration"], (data) => {
     const people = data.people || defaultPeople;
@@ -28,6 +41,7 @@ window.addEventListener("DOMContentLoaded", () => {
   });
 });
 
+// === Eventi salvataggio dati ===
 // Salva le impostazioni del timer (durata e lista)
 document.getElementById("save").addEventListener("click", () => {
   const people = document.getElementById("person-list").value;
@@ -53,17 +67,7 @@ document.getElementById("wheel-save").addEventListener("click", () => {
   });
 });
 
-const canvas = document.getElementById("wheel-canvas");
-const ctx = canvas.getContext("2d");
-const spinBtn = document.getElementById("spin");
-const winnerDisplay = document.getElementById("winner");
-
-let spinning = false;
-let angle = 0;
-let angularVelocity = 0;
-let selectedPerson = null;
-let selectedIndex = -1;
-
+// === Ruota: disegno e animazione ===
 // Disegna la ruota con i nomi specificati
 function drawWheel(names) {
   const radius = canvas.width / 2;
@@ -176,17 +180,6 @@ spinBtn.addEventListener("click", () => {
 
 drawWheel(defaultPeople.split("\n"));
 
-// Navigazione tra le sezioni timer e ruota
-document.getElementById("nav-timer").addEventListener("click", () => {
-  document.getElementById("section-timer").classList.remove("hidden");
-  document.getElementById("section-wheel").classList.add("hidden");
-});
-
-document.getElementById("nav-wheel").addEventListener("click", () => {
-  document.getElementById("section-timer").classList.add("hidden");
-  document.getElementById("section-wheel").classList.remove("hidden");
-});
-
 // Ripristina la lista originale della ruota
 document.getElementById("wheel-reset").addEventListener("click", () => {
   document.getElementById("wheel-person-list").value = defaultPeople;
@@ -220,10 +213,18 @@ document.getElementById("wheel-shuffle").addEventListener("click", () => {
   drawWheel(names);
 });
 
-const confettiCanvas = document.getElementById("confetti-canvas");
-const confettiCtx = confettiCanvas.getContext("2d");
-let confettiParticles = [];
+// === Navigazione UI ===
+document.getElementById("nav-timer").addEventListener("click", () => {
+  document.getElementById("section-timer").classList.remove("hidden");
+  document.getElementById("section-wheel").classList.add("hidden");
+});
 
+document.getElementById("nav-wheel").addEventListener("click", () => {
+  document.getElementById("section-timer").classList.add("hidden");
+  document.getElementById("section-wheel").classList.remove("hidden");
+});
+
+// === Confetti ===
 function startConfetti() {
   confettiCanvas.width = window.innerWidth;
   confettiCanvas.height = window.innerHeight;
