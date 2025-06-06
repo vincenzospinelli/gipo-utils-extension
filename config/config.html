@@ -78,12 +78,6 @@
                 class="block"
               ></canvas>
             </div>
-            <button
-              id="spin"
-              class="bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded"
-            >
-              Gira la ruota
-            </button>
             <div id="winner" class="mt-4 text-xl font-bold text-blue-700"></div>
           </div>
           <div class="flex flex-col w-1/2">
@@ -97,24 +91,32 @@
               placeholder="Una persona per riga..."
               class="w-full p-3 border border-gray-300 rounded mb-4 focus:outline-none focus:ring focus:border-blue-500"
             ></textarea>
-            <button
-              id="wheel-save"
-              class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded"
-            >
-              Salva lista
-            </button>
-            <button
-              id="wheel-shuffle"
-              class="bg-yellow-500 hover:bg-yellow-600 text-white font-semibold py-2 px-4 rounded mt-2"
-            >
-              Mischia lista
-            </button>
-            <button
-              id="wheel-reset"
-              class="bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded mt-2"
-            >
-              Ripristina lista
-            </button>
+            <div class="flex gap-2">
+              <button
+                id="spin"
+                class="flex-1 bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded"
+              >
+                Gira
+              </button>
+              <button
+                id="wheel-save"
+                class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded"
+              >
+                Salva
+              </button>
+              <button
+                id="wheel-shuffle"
+                class="flex-1 bg-yellow-500 hover:bg-yellow-600 text-white font-semibold py-2 px-4 rounded"
+              >
+                Mischia
+              </button>
+              <button
+                id="wheel-reset"
+                class="flex-1 bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded"
+              >
+                Ripristina
+              </button>
+            </div>
             <div
               id="wheel-status"
               class="text-sm text-green-600 h-5 mt-2"
