@@ -74,3 +74,6 @@ Testata su:
 - Esportazione dello storico delle estrazioni
 
 ---
+
+# Norme sulla privacy
+Questa estensione non raccoglie, memorizza né trasmette alcun dato personale. Tutti i dati inseriti dall’utente (es. nomi o impostazioni) vengono salvati localmente nel browser, e non vengono condivisi con terze parti.
