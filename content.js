@@ -80,7 +80,6 @@ if (!document.getElementById("gipo-timer-widget")) {
   document.getElementById("gipo-timer-display").textContent = "00:00:00";
 
   // === Utility functions ===
-
   const playBeep = () => {
     const beep = document.getElementById("beep-sound");
     if (beep) {
@@ -100,7 +99,6 @@ if (!document.getElementById("gipo-timer-widget")) {
   };
 
   // === Timer Logic ===
-
   let personList = [];
   let currentIndex = 0;
   let timerDuration = 60;
@@ -132,7 +130,6 @@ if (!document.getElementById("gipo-timer-widget")) {
   };
 
   // === UI Updates ===
-
   const updateClock = () => {
     if (!startTime) return;
     const remaining = startTime - Date.now();
@@ -155,7 +152,6 @@ if (!document.getElementById("gipo-timer-widget")) {
   };
 
   // === Configuration ===
-
   const loadConfiguration = () => {
     chrome.storage.sync.get(["people", "duration"], (data) => {
       const people = data.people || defaultPeople;
@@ -171,7 +167,6 @@ if (!document.getElementById("gipo-timer-widget")) {
   };
 
   // === Event Listeners ===
-
   const changePerson = (increment) => {
     if (personList.length > 0) {
       currentIndex =
@@ -262,7 +257,6 @@ if (!document.getElementById("gipo-timer-widget")) {
   };
 
   // === Initial calls ===
-
   chrome.storage.sync.get("theme", (data) => {
     const theme = data.theme || "dark";
     container.classList.add(theme);

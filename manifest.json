@@ -15,7 +15,7 @@
     {
       "matches": ["<all_urls>"],
       "js": ["content.js"],
-      "css": ["dist/output.css", "assets/styles/styles.css"]
+      "css": ["assets/styles/tailwind.css", "assets/styles/styles.css"]
     }
   ],
   "icons": {
@@ -23,7 +23,7 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["dist/output.css"],
+      "resources": ["assets/styles/tailwind.css"],
       "matches": ["<all_urls>"]
     },
     {
