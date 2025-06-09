@@ -265,3 +265,16 @@ function updateConfetti() {
     requestAnimationFrame(updateConfetti);
   }
 }
+
+// === Gestione hash per navigazione ===
+window.addEventListener("hashchange", handleHash);
+window.addEventListener("DOMContentLoaded", handleHash);
+
+function handleHash() {
+  const hash = window.location.hash;
+  if (hash === "#wheel") {
+    document.getElementById("nav-wheel").click();
+  } else {
+    document.getElementById("nav-timer").click();
+  }
+}

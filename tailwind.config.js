@@ -2,7 +2,8 @@
 module.exports = {
   content: [
     "./content.js",
-    "./config/config.html",
+    "./options/options.html",
+    "./popup/popup.html",
     "./assets/**/*.html",
     "./assets/**/*.js",
   ],

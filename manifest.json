@@ -4,8 +4,14 @@
   "version": "1.0",
   "description": "GipoTimer & GipoWheel of Names",
   "permissions": ["storage", "activeTab", "scripting"],
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "48": "assets/images/icon.png"
+    }
+  },
   "options_ui": {
-    "page": "config/config.html",
+    "page": "options/options.html",
     "open_in_tab": true
   },
   "background": {

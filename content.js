@@ -32,7 +32,19 @@ if (!document.getElementById("gipo-timer-widget")) {
 
   // Timer HTML markupπ
   const TIMER_HTML = `
-    <div class="flex flex-col items-center gap-4 p-4 bg-white dark:bg-gray-800 shadow-lg rounded-lg text-gray-800 dark:text-white text-sm">
+    <div class="flex flex-col items-center gap-4 pt-8 pr-4 pb-4 pl-4 bg-white dark:bg-gray-800 shadow-lg rounded-lg text-gray-800 dark:text-white text-sm relative">
+      <div class="absolute top-1 left-1 z-10">
+        <div class="relative inline-block text-left min-w-max">
+          <button class="gipo-button" id="menu-toggle">☰</button>
+          <div id="menu-content" class="hidden absolute left-0 mt-2 w-full bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded shadow-md z-20">
+            <button class="flex w-full justify-center px-4 py-2 text-sm text-gray-700 dark:text-white hover:bg-gray-100 dark:hover:bg-gray-600" id="toggle-theme">🌙</button>
+            <button class="flex w-full justify-center px-4 py-2 text-sm text-gray-700 dark:text-white hover:bg-gray-100 dark:hover:bg-gray-600" id="open-settings">⚙️</button>
+          </div>
+        </div>
+      </div>
+      <div class="absolute top-1 right-1 z-10">
+        <button class="gipo-button" id="hide-widget">X</button>
+      </div>
       <div class="w-24 h-24 rounded-full border-4 border-black dark:border-white relative">
         <!-- centro -->
         <div class="absolute w-2 h-2 bg-black dark:bg-white rounded-full top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10"></div>
@@ -44,14 +56,12 @@ if (!document.getElementById("gipo-timer-widget")) {
       </div>
       <div id="current-person" class="font-semibold text-center text-xl"></div>
       <div id="gipo-timer-display" class="text-2xl font-mono"></div>
-      <div class="flex gap-2 flex-wrap justify-center">
+      <div class="flex gap-2 flex-wrap justify-center items-center">
         <button class="gipo-button" id="prev-person">⏮</button>
         <button class="gipo-button" id="start-timer">▶</button>
         <button class="gipo-button" id="stop-timer">⏸</button>
         <button class="gipo-button" id="reset-timer">⏹</button>
         <button class="gipo-button" id="next-person">⏭</button>
-        <button class="gipo-button" id="toggle-theme">🌙</button>
-        <button class="gipo-button" id="open-settings">⚙️</button>
       </div>
     </div>
   `;
@@ -256,6 +266,25 @@ if (!document.getElementById("gipo-timer-widget")) {
       newTheme === "dark" ? "🌙" : "☀️";
   };
 
+  document.getElementById("hide-widget").onclick = () => {
+    container.style.display = "none";
+    chrome.storage.sync.set({widgetVisible: false});
+  };
+
+  // Menu toggle handlers
+  const menuToggle = document.getElementById("menu-toggle");
+  const menuContent = document.getElementById("menu-content");
+
+  menuToggle.addEventListener("click", () => {
+    menuContent.classList.toggle("hidden");
+  });
+
+  document.addEventListener("click", (e) => {
+    if (!menuContent.contains(e.target) && e.target !== menuToggle) {
+      menuContent.classList.add("hidden");
+    }
+  });
+
   // === Initial calls ===
   chrome.storage.sync.get("theme", (data) => {
     const theme = data.theme || "dark";
@@ -267,4 +296,24 @@ if (!document.getElementById("gipo-timer-widget")) {
   loadConfiguration();
 
   makeDraggable(container);
+
+  chrome.storage.sync.get("widgetVisible", (data) => {
+    if (data.widgetVisible === false) {
+      container.style.display = "none";
+    }
+  });
 }
+
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.action === "show-widget") {
+    const widget = document.getElementById("gipo-timer-widget");
+
+    if (!widget) {
+      // Se non esiste, rigenera
+      location.reload();
+    } else {
+      widget.style.display = "block";
+      chrome.storage.sync.set({widgetVisible: true});
+    }
+  }
+});
