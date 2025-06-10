@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
   "name": "GipoUtils",
-  "version": "1.0",
+  "version": "1.1.1",
   "description": "GipoTimer & GipoWheel of Names",
-  "permissions": ["storage", "activeTab", "scripting"],
+  "permissions": ["storage"],
   "action": {
     "default_popup": "popup/popup.html",
     "default_icon": {
