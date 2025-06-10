@@ -2,8 +2,8 @@
 
 **GipoUtils** è un'estensione per Chrome che include due strumenti interattivi e configurabili:
 
-- 🎡 **GipoWheel of Names** – Una ruota personalizzabile per scegliere nomi a caso.
 - ⏱️ **GipoTimer** – Un timer associato a una lista di persone per gestire turni, attività o presentazioni.
+- 🎡 **GipoWheel of Names** – Una ruota personalizzabile per scegliere nomi a caso.
 
 ---
 
