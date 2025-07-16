@@ -250,8 +250,43 @@ if (!document.getElementById("gipo-timer-widget")) {
     if (personList.length > 0) {
       currentIndex =
         (currentIndex + increment + personList.length) % personList.length;
+
+      const currentJiraId = personList[currentIndex].jiraId;
+
+      // Deseleziona eventuali precedenti visibili
+      const activeCheckbox = document.querySelector(
+        `input[type="checkbox"][checked]`
+      );
+      if (activeCheckbox) {
+        activeCheckbox.click();
+      }
+
+      // Seleziona e deseleziona correttamente eventuali selezionati nel popover
+      const showMoreBtn = document.querySelector(
+        '[data-testid="filters.ui.filters.assignee.stateless.show-more-button.assignee-filter-show-more"]'
+      );
+      if (showMoreBtn) showMoreBtn.click();
+
+      // Piccolo delay per assicurarsi che il popover si apra prima di cercare e cliccare
+      setTimeout(() => {
+        const selectedPopoverBtns = Array.from(
+          document.querySelectorAll(
+            'button[role="menuitemcheckbox"][aria-checked="true"]'
+          )
+        );
+
+        const toDeselect = selectedPopoverBtns.filter(
+          (btn) => btn.id !== currentJiraId
+        );
+        if (toDeselect.length > 0) {
+          console.log("toDeselect", toDeselect);
+          toDeselect.forEach((btn) => btn.click());
+        }
+      }, 100);
+
       updateCurrentPerson();
       changeJiraView(personList[currentIndex]);
+
       chrome.storage.sync.get("duration", (data) => {
         if (data.duration) {
           timerDuration = parseInt(data.duration, 10);
