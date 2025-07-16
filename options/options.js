@@ -1,6 +1,21 @@
 // === Costanti e variabili globali ===
-const defaultPeople =
-  "Alessandro\nClaudio\nDiego\nElisa\nFedeD\nFedeG\nFrancesco\nGabriele\nLuca\nMatteo\nNicola\nRoberto\nStefano\nVincenzo";
+const defaultPeople = [
+  {name: "Alessandro", jiraId: "617aa59316119e0069442a6b"},
+  {name: "Claudio", jiraId: "712020:35edea3d-1d8f-4974-83a8-4211d0a72ffc"},
+  {name: "Diego", jiraId: "5d6cce0a94e3580d923b094a"},
+  {name: "Elisa"},
+  {name: "Enrico", jiraId: "5ee71feeb04ccf0aae582f1f"},
+  {name: "FedeD"},
+  {name: "FedeG", jiraId: "6110f69c8ad5b6007039f600"},
+  {name: "Francesco", jiraId: "641188d37222b08f3e70eb17"},
+  {name: "Gabriele", jiraId: "712020:28cd82e1-1d78-4ddb-872f-d2aa0ea76748"},
+  {name: "Luca", jiraId: "712020:638f74b4-f89d-4d97-a8e7-17b5e1751221"},
+  {name: "Matteo", jiraId: "641188d30152b5f4f9f04779"},
+  {name: "Nicola", jiraId: "5eb00c556c84140b9e713401"},
+  {name: "Roberto", jiraId: "712020:68d63d5b-cc98-4e72-bc6b-f508992de65e"},
+  {name: "Stefano", jiraId: "712020:449c0f67-b6ba-4f7d-8f6e-fa2c5a541e9c"},
+  {name: "Vincenzo", jiraId: "63bc2177df0fa548e8e84a62"},
+];
 const defaultDuration = 60;
 const canvas = document.getElementById("wheel-canvas");
 const ctx = canvas.getContext("2d");
@@ -16,39 +31,110 @@ let selectedPerson = null;
 let selectedIndex = -1;
 let confettiParticles = [];
 
+// === Helper functions for people list UI ===
+function createPersonRow(person = {name: "", jiraId: ""}) {
+  const div = document.createElement("div");
+  div.className = "flex gap-2 items-center";
+
+  const nameInput = document.createElement("input");
+  nameInput.type = "text";
+  nameInput.placeholder = "Nome";
+  nameInput.value = person.name || "";
+  nameInput.className = "flex-grow border rounded px-2 py-1";
+
+  const jiraInput = document.createElement("input");
+  jiraInput.type = "text";
+  jiraInput.placeholder = "Jira ID (opzionale)";
+  jiraInput.value = person.jiraId || "";
+  jiraInput.className = "w-32 border rounded px-2 py-1";
+
+  const removeBtn = document.createElement("button");
+  removeBtn.type = "button";
+  removeBtn.textContent = "✕";
+  removeBtn.className = "text-red-600 font-bold px-2 py-1 hover:text-red-800";
+  removeBtn.addEventListener("click", () => {
+    removePerson(div);
+  });
+
+  div.appendChild(nameInput);
+  div.appendChild(jiraInput);
+  div.appendChild(removeBtn);
+
+  return div;
+}
+
+function renderPeopleList(people) {
+  const container = document.getElementById("people-list");
+  container.innerHTML = "";
+  people.forEach((person) => {
+    const row = createPersonRow(person);
+    container.appendChild(row);
+  });
+}
+
+function getCurrentPeopleFromForm() {
+  const container = document.getElementById("people-list");
+  const people = [];
+  container.querySelectorAll("div").forEach((div) => {
+    const inputs = div.querySelectorAll("input");
+    const name = inputs[0].value.trim();
+    const jiraId = inputs[1].value.trim();
+    if (name) {
+      people.push(jiraId ? {name, jiraId} : {name});
+    }
+  });
+  return people;
+}
+
+function addPerson() {
+  const container = document.getElementById("people-list");
+  const row = createPersonRow();
+  container.appendChild(row);
+}
+
+function removePerson(row) {
+  row.remove();
+}
+
 // === Inizializzazione pagina ===
 window.addEventListener("DOMContentLoaded", () => {
-  chrome.storage.sync.get(["people", "duration"], (data) => {
-    const people = data.people || defaultPeople;
+  chrome.storage.sync.get(["peopleWithIds", "duration"], (data) => {
+    const peopleWithIds = data.peopleWithIds || defaultPeople;
     const duration = data.duration || defaultDuration;
 
-    document.getElementById("person-list").value = people;
+    renderPeopleList(peopleWithIds);
     document.getElementById("timer-duration").value = duration;
 
-    document.getElementById("wheel-person-list").value = people;
+    // Update wheel-person-list textarea with names only
+    document.getElementById("wheel-person-list").value = peopleWithIds
+      .map((p) => p.name)
+      .join("\n");
 
-    const names = people
-      .split("\n")
-      .map((n) => n.trim())
-      .filter(Boolean);
+    const names = peopleWithIds.map((p) => p.name);
     drawWheel(names);
 
     // Se non ci sono dati salvati, imposta i valori di default
     // Salva i default se non erano presenti
-    if (!data.people || !data.duration) {
-      chrome.storage.sync.set({people, duration});
+    if (!data.peopleWithIds || !data.duration) {
+      chrome.storage.sync.set({peopleWithIds, duration});
+    }
+
+    if (peopleWithIds.length > 0) {
+      changeJiraView(peopleWithIds[0]);
     }
   });
+
+  document.getElementById("add-person").addEventListener("click", addPerson);
 });
 
 // === Eventi salvataggio dati ===
 // Salva le impostazioni del timer (durata e lista)
 document.getElementById("save").addEventListener("click", () => {
-  const people = document.getElementById("person-list").value;
+  const peopleWithIds = getCurrentPeopleFromForm();
   const duration =
     parseInt(document.getElementById("timer-duration").value, 10) ||
     defaultDuration;
-  chrome.storage.sync.set({people, duration}, () => {
+  chrome.storage.sync.set({peopleWithIds, duration}, () => {
     const status = document.getElementById("status");
     status.textContent = "Salvato!";
     setTimeout(() => (status.textContent = ""), 2000);
@@ -57,8 +143,20 @@ document.getElementById("save").addEventListener("click", () => {
 
 // Salva la lista della ruota nel local storage
 document.getElementById("wheel-save").addEventListener("click", () => {
-  const people = document.getElementById("wheel-person-list").value;
-  chrome.storage.sync.set({people}, () => {
+  const peopleNames = document
+    .getElementById("wheel-person-list")
+    .value.split("\n")
+    .map((n) => n.trim())
+    .filter(Boolean);
+
+  // To keep jiraId info, try to match with current peopleWithIds from form
+  const currentPeople = getCurrentPeopleFromForm();
+  const peopleWithIds = peopleNames.map((name) => {
+    const found = currentPeople.find((p) => p.name === name);
+    return found || {name};
+  });
+
+  chrome.storage.sync.set({peopleWithIds}, () => {
     document.getElementById("wheel-status").textContent = "Lista salvata!";
     setTimeout(
       () => (document.getElementById("wheel-status").textContent = ""),
@@ -149,7 +247,14 @@ function animate(names) {
     const listEl = document.getElementById("wheel-person-list");
     const updatedList = names.filter((n) => n !== selectedPerson).join("\n");
     listEl.value = updatedList;
-    chrome.storage.sync.set({people: updatedList});
+
+    // Also update peopleWithIds storage removing the winner
+    const currentPeople = getCurrentPeopleFromForm();
+    const updatedPeople = currentPeople.filter(
+      (p) => p.name !== selectedPerson
+    );
+    renderPeopleList(updatedPeople);
+    chrome.storage.sync.set({peopleWithIds: updatedPeople});
   } else {
     requestAnimationFrame(() => animate(names));
   }
@@ -178,18 +283,21 @@ spinBtn.addEventListener("click", () => {
   animate(names);
 });
 
-drawWheel(defaultPeople.split("\n"));
+drawWheel(defaultPeople.map((p) => p.name));
 
 // Ripristina la lista originale della ruota
 document.getElementById("wheel-reset").addEventListener("click", () => {
-  document.getElementById("wheel-person-list").value = defaultPeople;
-  chrome.storage.sync.set({people: defaultPeople}, () => {
+  renderPeopleList(defaultPeople);
+  document.getElementById("wheel-person-list").value = defaultPeople
+    .map((p) => p.name)
+    .join("\n");
+  chrome.storage.sync.set({peopleWithIds: defaultPeople}, () => {
     document.getElementById("wheel-status").textContent = "Lista ripristinata!";
     setTimeout(
       () => (document.getElementById("wheel-status").textContent = ""),
       2000
     );
-    drawWheel(defaultPeople.split("\n"));
+    drawWheel(defaultPeople.map((p) => p.name));
   });
 });
 
@@ -209,7 +317,15 @@ document.getElementById("wheel-shuffle").addEventListener("click", () => {
 
   const shuffled = names.join("\n");
   textarea.value = shuffled;
-  chrome.storage.sync.set({people: shuffled});
+
+  // Update peopleWithIds accordingly, preserving jiraId if possible
+  const currentPeople = getCurrentPeopleFromForm();
+  const shuffledPeople = names.map((name) => {
+    const found = currentPeople.find((p) => p.name === name);
+    return found || {name};
+  });
+
+  chrome.storage.sync.set({peopleWithIds: shuffledPeople});
   drawWheel(names);
 });
 

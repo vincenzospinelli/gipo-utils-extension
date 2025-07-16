@@ -27,6 +27,43 @@ function makeDraggable(element) {
   });
 }
 
+function changeJiraView(person) {
+  if (!person?.jiraId) return;
+
+  const labelSelector = `label[for="assignee-${person.jiraId}"]`;
+  let label = document.querySelector(labelSelector);
+
+  if (label) {
+    label.click();
+    return;
+  }
+
+  // Se non esiste visibile, prova ad aprire il popover
+  const showMoreBtn = document.querySelector(
+    '[data-testid="filters.ui.filters.assignee.stateless.show-more-button.assignee-filter-show-more"]'
+  );
+  if (!showMoreBtn) {
+    console.warn(
+      "Assignee non visibile e nessun pulsante 'show more' trovato."
+    );
+    return;
+  }
+
+  showMoreBtn.click();
+
+  // Retry dopo un piccolo delay
+  setTimeout(() => {
+    const hiddenLabel = document.querySelector(labelSelector);
+    if (hiddenLabel) {
+      hiddenLabel.click();
+    } else {
+      console.warn(
+        `Impossibile trovare assignee ${person.jiraId} anche dopo show more`
+      );
+    }
+  }, 300);
+}
+
 if (!document.getElementById("gipo-timer-widget")) {
   // === DOM Setup ===
 
@@ -115,8 +152,23 @@ if (!document.getElementById("gipo-timer-widget")) {
   let startTime = null;
   let intervalId = null;
 
-  const defaultPeople =
-    "Alessandro\nClaudio\nDiego\nElisa\nFedeD\nFedeG\nFrancesco\nGabriele\nLuca\nMatteo\nNicola\nRoberto\nStefano\nVincenzo";
+  const defaultPeople = [
+    {name: "Alessandro", jiraId: "617aa59316119e0069442a6b"},
+    {name: "Claudio", jiraId: "712020%3A35edea3d-1d8f-4974-83a8-4211d0a72ffc"},
+    {name: "Diego", jiraId: "5d6cce0a94e3580d923b094a"},
+    {name: "Elisa"},
+    {name: "Enrico", jiraId: "5ee71feeb04ccf0aae582f1f"},
+    {name: "FedeD"},
+    {name: "FedeG", jiraId: "6110f69c8ad5b6007039f600"},
+    {name: "Francesco", jiraId: "641188d37222b08f3e70eb17"},
+    {name: "Gabriele", jiraId: "712020%3A28cd82e1-1d78-4ddb-872f-d2aa0ea76748"},
+    {name: "Luca", jiraId: "712020%3A638f74b4-f89d-4d97-a8e7-17b5e1751221"},
+    {name: "Matteo", jiraId: "641188d30152b5f4f9f04779"},
+    {name: "Nicola", jiraId: "5eb00c556c84140b9e713401"},
+    {name: "Roberto", jiraId: "712020%3A68d63d5b-cc98-4e72-bc6b-f508992de65e"},
+    {name: "Stefano", jiraId: "712020%3A449c0f67-b6ba-4f7d-8f6e-fa2c5a541e9c"},
+    {name: "Vincenzo", jiraId: "63bc2177df0fa548e8e84a62"},
+  ];
   const defaultDuration = 60;
 
   const updateDisplay = () => {
@@ -157,20 +209,20 @@ if (!document.getElementById("gipo-timer-widget")) {
     if (personList.length === 0) {
       display.textContent = "Nessuno selezionato";
     } else {
-      display.textContent = `${personList[currentIndex]}`;
+      const currentPerson = personList[currentIndex];
+      display.textContent = currentPerson.name || "";
     }
   };
 
   // === Configuration ===
   const loadConfiguration = () => {
-    chrome.storage.sync.get(["people", "duration"], (data) => {
-      const people = data.people || defaultPeople;
+    chrome.storage.sync.get(["peopleWithIds", "duration"], (data) => {
+      const people = data.peopleWithIds || defaultPeople;
       timerDuration = parseInt(data.duration, 10) || defaultDuration;
 
       personList = people
-        .split("\n")
-        .map((p) => p.trim())
-        .filter((p) => p);
+        .filter((p) => p && p.name)
+        .map((p) => ({name: p.name, jiraId: p.jiraId}));
       currentIndex = 0;
       updateCurrentPerson();
     });
@@ -182,6 +234,7 @@ if (!document.getElementById("gipo-timer-widget")) {
       currentIndex =
         (currentIndex + increment + personList.length) % personList.length;
       updateCurrentPerson();
+      changeJiraView(personList[currentIndex]);
       chrome.storage.sync.get("duration", (data) => {
         if (data.duration) {
           timerDuration = parseInt(data.duration, 10);
