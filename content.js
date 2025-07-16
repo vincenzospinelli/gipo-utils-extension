@@ -30,38 +30,55 @@ function makeDraggable(element) {
 function changeJiraView(person) {
   if (!person?.jiraId) return;
 
-  const labelSelector = `label[for="assignee-${person.jiraId}"]`;
-  let label = document.querySelector(labelSelector);
+  const jiraId = person.jiraId;
+  const labelSelector = `label[for="assignee-${jiraId}"]`;
+  const popoverBtnSelector = `button[id="${jiraId}"][role="menuitemcheckbox"]`;
 
-  if (label) {
-    label.click();
-    return;
-  }
+  // Deseleziona attivi
+  document.querySelectorAll('[aria-checked="true"]').forEach((el) => {
+    el.click();
+  });
 
-  // Se non esiste visibile, prova ad aprire il popover
+  // Mostra il popover se presente
   const showMoreBtn = document.querySelector(
     '[data-testid="filters.ui.filters.assignee.stateless.show-more-button.assignee-filter-show-more"]'
   );
-  if (!showMoreBtn) {
-    console.warn(
-      "Assignee non visibile e nessun pulsante 'show more' trovato."
-    );
+  if (showMoreBtn) showMoreBtn.click();
+
+  // Funzione di attesa
+  function waitForSelector(selector, timeout = 2000) {
+    return new Promise((resolve, reject) => {
+      const start = performance.now();
+      const interval = setInterval(() => {
+        const el = document.querySelector(selector);
+        if (el && el.offsetParent !== null) {
+          clearInterval(interval);
+          resolve(el);
+        } else if (performance.now() - start > timeout) {
+          clearInterval(interval);
+          reject();
+        }
+      }, 100);
+    });
+  }
+
+  // Prova a cliccare subito se disponibile
+  let el =
+    document.querySelector(labelSelector) ||
+    document.querySelector(popoverBtnSelector);
+  if (el && el.offsetParent !== null) {
+    el.dispatchEvent(new MouseEvent("click", {bubbles: true}));
     return;
   }
 
-  showMoreBtn.click();
-
-  // Retry dopo un piccolo delay
-  setTimeout(() => {
-    const hiddenLabel = document.querySelector(labelSelector);
-    if (hiddenLabel) {
-      hiddenLabel.click();
-    } else {
-      console.warn(
-        `Impossibile trovare assignee ${person.jiraId} anche dopo show more`
-      );
-    }
-  }, 300);
+  // Altrimenti, attendi che appaia
+  waitForSelector(popoverBtnSelector, 2000)
+    .then((el) => {
+      el.dispatchEvent(new MouseEvent("click", {bubbles: true}));
+    })
+    .catch(() =>
+      console.warn("Assignee non trovato nemmeno dopo retry:", jiraId)
+    );
 }
 
 if (!document.getElementById("gipo-timer-widget")) {
@@ -292,6 +309,16 @@ if (!document.getElementById("gipo-timer-widget")) {
   document.getElementById("prev-person").onclick = () => {
     playBeep();
     changePerson(-1);
+    // Deseleziona precedenti selezioni cliccandole (sia checkbox che label)
+    const activeFilter = document.querySelector('[aria-checked="true"]');
+    if (activeFilter) {
+      activeFilter.click();
+    }
+
+    const activeLabel = document.querySelector('label[aria-checked="true"]');
+    if (activeLabel) {
+      activeLabel.click();
+    }
   };
   document.getElementById("next-person").onclick = () => {
     playBeep();
