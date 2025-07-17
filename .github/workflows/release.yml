@@ -18,6 +18,9 @@ jobs:
         with:
           node-version: "20"
 
+      - name: Install dependencies
+        run: npm install
+
       - name: Install Chrome Web Store CLI
         run: npm install -g chrome-webstore-upload-cli
 
@@ -30,7 +33,7 @@ jobs:
       - name: Upload to Chrome Web Store
         run: |
           chrome-webstore-upload upload \
-            --source package.zip \
+            --source package/package.zip \
             --extension-id ${{ secrets.CHROME_EXTENSION_ID }} \
             --client-id ${{ secrets.CHROME_CLIENT_ID }} \
             --client-secret ${{ secrets.CHROME_CLIENT_SECRET }} \
