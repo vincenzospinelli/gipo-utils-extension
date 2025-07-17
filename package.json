@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "build:css": "npx tailwindcss -i ./assets/styles/styles.css -o ./assets/styles/tailwind.css --minify",
+    "build": "rimraf dist && mkdir dist && npm run build:css && node scripts/copy-to-dist.js",
     "package:zip": "rimraf package && mkdir -p package && zip -r package/package.zip dist/*",
     "prepublish:version": "node scripts/update-version-from-tag.js",
     "refresh:token": "node scripts/refresh-token.js"

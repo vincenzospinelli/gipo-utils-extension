@@ -29,6 +29,9 @@ jobs:
         env:
           GITHUB_REF: ${{ github.ref }}
 
+      - name: Build extension
+        run: npm run build
+
       - name: Package extension
         run: npm run package:zip
 
