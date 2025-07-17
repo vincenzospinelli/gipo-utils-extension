@@ -5,7 +5,7 @@ const path = require("path");
 const distDir = "dist";
 const manifest = fs.readJsonSync("manifest.json");
 const version = manifest.version || "0.0.0";
-const outputZip = `gipo-utils-extension-v${version}.zip`;
+const outputZip = `package.zip`;
 
 // Cartelle e file da includere
 const include = [
