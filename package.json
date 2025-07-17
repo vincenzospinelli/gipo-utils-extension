@@ -8,7 +8,7 @@
     "build:css": "npx tailwindcss -i ./assets/styles/styles.css -o ./assets/styles/tailwind.css --minify",
     "package:zip": "node scripts/package-extension.js",
     "prepublish:version": "node scripts/update-version-from-tag.js",
-    "refresh:token": "node scripts/refresh-token.mjs"
+    "refresh:token": "node scripts/refresh-token.js"
   },
   "keywords": [],
   "author": "",
