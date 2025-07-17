@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "GipoUtils",
-  "version": "1.1.1",
+  "version": "1.0.0",
   "description": "GipoTimer & GipoWheel of Names",
   "permissions": ["storage"],
   "action": {
