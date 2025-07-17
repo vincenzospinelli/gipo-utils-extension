@@ -25,7 +25,9 @@ jobs:
         run: npm install -g chrome-webstore-upload-cli
 
       - name: Set version from git tag
-        run: npm run prepublish:version
+        run: node scripts/update-version-from-tag.js
+        env:
+          GITHUB_REF: ${{ github.ref }}
 
       - name: Package extension
         run: npm run package:zip
