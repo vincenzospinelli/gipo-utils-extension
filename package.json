@@ -3,14 +3,20 @@
   "version": "1.0.0",
   "description": "**GipoUtils** è un'estensione per Chrome che include due strumenti interattivi e configurabili:",
   "main": "content.js",
+  "type": "module",
   "scripts": {
     "build:css": "npx tailwindcss -i ./assets/styles/styles.css -o ./assets/styles/tailwind.css --minify",
-    "package:zip": "node package-extension.js"
+    "package:zip": "node scripts/package-extension.js",
+    "prepublish:version": "node scripts/update-version-from-tag.js",
+    "refresh:token": "node scripts/refresh-token.mjs"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "express": "^5.1.0",
+    "googleapis": "^153.0.0",
+    "open": "^10.2.0",
     "tailwindcss": "^3.4.17"
   },
   "dependencies": {
