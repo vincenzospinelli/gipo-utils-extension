@@ -1,13 +1,34 @@
-const fs = require("fs-extra");
-const archiver = require("archiver");
-const path = require("path");
+import archiver from "archiver";
+import fs from "fs-extra";
+import path from "path";
+import {fileURLToPath} from "url";
 
-const distDir = "dist";
-const manifest = fs.readJsonSync("manifest.json");
-const version = manifest.version || "0.0.0";
-const outputZip = `package.zip`;
+// Resolve __dirname in ESM
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-// Cartelle e file da includere
+// Project root = parent of /scripts
+const rootDir = path.resolve(__dirname, "..");
+
+// Paths
+const distDir = path.join(rootDir, "dist");
+const packageDir = path.join(rootDir, "package");
+const manifestPath = path.join(rootDir, "manifest.json");
+
+// Read manifest version
+let version = "0.0.0";
+try {
+  const manifest = await fs.readJson(manifestPath);
+  version = manifest.version || version;
+  console.log(`ℹ Manifest version detected: ${version}`);
+} catch (err) {
+  console.warn(
+    "⚠ Impossibile leggere manifest.json, uso versione di fallback 0.0.0:",
+    err.message
+  );
+}
+
+// Files / folders to include (relative to root)
 const include = [
   "manifest.json",
   "background.js",
@@ -17,29 +38,43 @@ const include = [
   "options",
 ];
 
-// 1. Pulizia cartella di build
-fs.removeSync(distDir);
-fs.ensureDirSync(distDir);
+// 1. Clean & recreate dist
+await fs.remove(distDir);
+await fs.ensureDir(distDir);
 
-// 2. Copia i file/cartelle nella cartella dist
-include.forEach((item) => {
-  fs.copySync(item, path.join(distDir, path.basename(item)));
-});
+// 2. Copy include items if they exist
+for (const rel of include) {
+  const src = path.join(rootDir, rel);
+  if (await fs.pathExists(src)) {
+    const dest = path.join(distDir, path.basename(rel));
+    await fs.copy(src, dest);
+    console.log(`✔ Copiato: ${rel}`);
+  } else {
+    console.log(`↷ Skippato (non trovato): ${rel}`);
+  }
+}
 
-// 3. Crea lo zip
-const output = fs.createWriteStream("./package/" + outputZip);
+// 3. Ensure package dir
+await fs.ensureDir(packageDir);
+
+// 4. Create zip archive
+const outputZip = "extension.zip"; // fixed name expected by workflow
+const zipPath = path.join(packageDir, outputZip);
+const output = fs.createWriteStream(zipPath);
 const archive = archiver("zip", {zlib: {level: 9}});
 
-output.on("close", () => {
-  console.log(
-    `✔ Estensione pacchettizzata: ${outputZip} (${archive.pointer()} byte)`
-  );
-});
-
-archive.on("error", (err) => {
-  throw err;
+const done = new Promise((resolve, reject) => {
+  output.on("close", () => {
+    console.log(
+      `✔ Estensione pacchettizzata: ${outputZip} (${archive.pointer()} byte)`
+    );
+    resolve();
+  });
+  output.on("error", reject);
+  archive.on("error", reject);
 });
 
 archive.pipe(output);
 archive.directory(distDir + "/", false);
-archive.finalize();
+await archive.finalize();
+await done;
