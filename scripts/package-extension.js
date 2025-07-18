@@ -36,7 +36,7 @@ const include = [
   "assets",
   "popup",
   "options",
-  "CHANGELOG.MD",
+  "CHANGELOG.md",
 ];
 
 // 1. Clean & recreate dist

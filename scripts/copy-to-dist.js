@@ -8,7 +8,7 @@ async function copyFiles() {
     "assets",
     "popup",
     "options",
-    "CHANGELOG.MD",
+    "CHANGELOG.md",
   ];
 
   for (const file of filesToCopy) {
