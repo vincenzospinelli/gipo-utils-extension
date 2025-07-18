@@ -1,6 +1,6 @@
 {
   "name": "gipo-utils-extension",
-  "version": "1.1.2",
+  "version": "1.1.3",
   "description": "**GipoUtils** è un'estensione per Chrome che include due strumenti interattivi e configurabili:",
   "main": "content.js",
   "type": "module",
