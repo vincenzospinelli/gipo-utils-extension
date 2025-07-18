@@ -39,13 +39,13 @@ function createPersonRow(person = {name: "", jiraId: ""}) {
   nameInput.type = "text";
   nameInput.placeholder = "Nome";
   nameInput.value = person.name || "";
-  nameInput.className = "flex-grow border rounded px-2 py-1";
+  nameInput.className = "flex-grow border rounded p-2";
 
   const jiraInput = document.createElement("input");
   jiraInput.type = "text";
   jiraInput.placeholder = "Jira ID (opzionale)";
   jiraInput.value = person.jiraId || "";
-  jiraInput.className = "w-32 border rounded px-2 py-1";
+  jiraInput.className = "w-full border rounded p-2";
 
   const removeBtn = document.createElement("button");
   removeBtn.type = "button";
