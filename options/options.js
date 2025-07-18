@@ -30,7 +30,7 @@ let selectedPerson = null;
 let selectedIndex = -1;
 let confettiParticles = [];
 
-// === Helper functions for people list UI ===
+// =============================================================== Helper functions for people list UI ===============================================================
 function createPersonRow(person = {name: "", jiraId: ""}) {
   const div = document.createElement("div");
   div.className = "flex gap-2 items-center";
@@ -95,7 +95,7 @@ function removePerson(row) {
   row.remove();
 }
 
-// === Inizializzazione pagina ===
+// =============================================================== Inizializzazione pagina ===============================================================
 window.addEventListener("DOMContentLoaded", () => {
   chrome.storage.sync.get(["peopleWithIds", "duration"], (data) => {
     const peopleWithIds = data.peopleWithIds || defaultPeople;
@@ -117,16 +117,21 @@ window.addEventListener("DOMContentLoaded", () => {
     if (!data.peopleWithIds || !data.duration) {
       chrome.storage.sync.set({peopleWithIds, duration});
     }
-
-    if (peopleWithIds.length > 0) {
-      changeJiraView(peopleWithIds[0]);
-    }
   });
 
   document.getElementById("add-person").addEventListener("click", addPerson);
+
+  const jiraUserFilterCheckbox = document.getElementById("jira-user-filter");
+  chrome.storage.sync.get(["filterJiraByUser"], (data) => {
+    jiraUserFilterCheckbox.checked = Boolean(data.filterJiraByUser);
+  });
+  jiraUserFilterCheckbox.addEventListener("change", () => {
+    chrome.storage.sync.set({filterJiraByUser: jiraUserFilterCheckbox.checked});
+  });
 });
 
-// === Eventi salvataggio dati ===
+// =============================================================== Eventi salvataggio dati ===============================================================
+
 // Salva le impostazioni del timer (durata e lista)
 document.getElementById("save").addEventListener("click", () => {
   const peopleWithIds = getCurrentPeopleFromForm();
@@ -328,15 +333,17 @@ document.getElementById("wheel-shuffle").addEventListener("click", () => {
   drawWheel(names);
 });
 
-// === Navigazione UI ===
+// =============================================================== Navigazione UI ===============================================================
 document.getElementById("nav-timer").addEventListener("click", () => {
   document.getElementById("section-timer").classList.remove("hidden");
   document.getElementById("section-wheel").classList.add("hidden");
+  document.getElementById("section-changelog")?.classList.add("hidden");
 });
 
 document.getElementById("nav-wheel").addEventListener("click", () => {
   document.getElementById("section-timer").classList.add("hidden");
   document.getElementById("section-wheel").classList.remove("hidden");
+  document.getElementById("section-changelog")?.classList.add("hidden");
 });
 
 // === Confetti ===
@@ -389,7 +396,26 @@ function handleHash() {
   const hash = window.location.hash;
   if (hash === "#wheel") {
     document.getElementById("nav-wheel").click();
+  } else if (hash === "#changelog") {
+    document.getElementById("nav-changelog").click();
   } else {
     document.getElementById("nav-timer").click();
   }
 }
+
+// Gestione click su Changelog e caricamento file CHANGELOG.md
+document.getElementById("nav-changelog").addEventListener("click", () => {
+  document.getElementById("section-timer").classList.add("hidden");
+  document.getElementById("section-wheel").classList.add("hidden");
+  document.getElementById("section-changelog").classList.remove("hidden");
+
+  fetch(chrome.runtime.getURL("CHANGELOG.md"))
+    .then((response) => response.text())
+    .then((text) => {
+      document.getElementById("changelog-content").textContent = text;
+    })
+    .catch(() => {
+      document.getElementById("changelog-content").textContent =
+        "Errore nel caricamento del changelog.";
+    });
+});
