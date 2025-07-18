@@ -1,3 +1,8 @@
+let filterJiraByUser = false;
+chrome.storage.sync.get("filterJiraByUser", (data) => {
+  filterJiraByUser = Boolean(data.filterJiraByUser);
+});
+
 function makeDraggable(element) {
   let isDragging = false;
   let offsetX = 0;
@@ -253,39 +258,32 @@ if (!document.getElementById("gipo-timer-widget")) {
 
       const currentJiraId = personList[currentIndex].jiraId;
 
-      // Deseleziona eventuali precedenti visibili
-      const activeCheckbox = document.querySelector(
-        `input[type="checkbox"][checked]`
+      // Deseleziona tutti i filtri attivi (checkbox o popover)
+      const activeCheckboxes = document.querySelectorAll(
+        'input[type="checkbox"]:checked'
       );
-      if (activeCheckbox) {
-        activeCheckbox.click();
-      }
+      activeCheckboxes.forEach((el) => el.click());
 
-      // Seleziona e deseleziona correttamente eventuali selezionati nel popover
       const showMoreBtn = document.querySelector(
         '[data-testid="filters.ui.filters.assignee.stateless.show-more-button.assignee-filter-show-more"]'
       );
       if (showMoreBtn) showMoreBtn.click();
 
-      // Piccolo delay per assicurarsi che il popover si apra prima di cercare e cliccare
       setTimeout(() => {
-        const selectedPopoverBtns = Array.from(
-          document.querySelectorAll(
-            'button[role="menuitemcheckbox"][aria-checked="true"]'
-          )
+        const activeButtons = document.querySelectorAll(
+          'button[role="menuitemcheckbox"][aria-checked="true"]'
         );
-
-        const toDeselect = selectedPopoverBtns.filter(
-          (btn) => btn.id !== currentJiraId
-        );
-        if (toDeselect.length > 0) {
-          console.log("toDeselect", toDeselect);
-          toDeselect.forEach((btn) => btn.click());
-        }
+        activeButtons.forEach((btn) => {
+          if (btn.id !== currentJiraId) {
+            btn.dispatchEvent(new MouseEvent("click", {bubbles: true}));
+          }
+        });
       }, 100);
 
       updateCurrentPerson();
-      changeJiraView(personList[currentIndex]);
+      if (filterJiraByUser) {
+        changeJiraView(personList[currentIndex]);
+      }
 
       chrome.storage.sync.get("duration", (data) => {
         if (data.duration) {
@@ -310,7 +308,9 @@ if (!document.getElementById("gipo-timer-widget")) {
   document.getElementById("start-timer").onclick = () => {
     playBeep();
     if (intervalId) return;
-    changeJiraView(personList[currentIndex]);
+    if (filterJiraByUser) {
+      changeJiraView(personList[currentIndex]);
+    }
     startTime = startTime || Date.now() + timerDuration * 1000;
     intervalId = setInterval(() => {
       updateDisplay();
@@ -344,16 +344,6 @@ if (!document.getElementById("gipo-timer-widget")) {
   document.getElementById("prev-person").onclick = () => {
     playBeep();
     changePerson(-1);
-    // Deseleziona precedenti selezioni cliccandole (sia checkbox che label)
-    const activeFilter = document.querySelector('[aria-checked="true"]');
-    if (activeFilter) {
-      activeFilter.click();
-    }
-
-    const activeLabel = document.querySelector('label[aria-checked="true"]');
-    if (activeLabel) {
-      activeLabel.click();
-    }
   };
   document.getElementById("next-person").onclick = () => {
     playBeep();
