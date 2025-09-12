@@ -20,8 +20,7 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["content.js"],
-      "css": ["assets/styles/tailwind.css", "assets/styles/styles.css"]
+      "js": ["content.js"]
     }
   ],
   "icons": {

@@ -23,6 +23,14 @@ function makeDraggable(element) {
   document.addEventListener("mouseup", () => {
     isDragging = false;
     element.style.userSelect = "auto";
+    // Persist position on mouse up
+    try {
+      const left = element.style.left;
+      const top = element.style.top;
+      if (left && top) {
+        chrome.storage.sync.set({widgetPosition: {left, top}});
+      }
+    } catch {}
   });
 }
 
@@ -94,17 +102,22 @@ function format(ms) {
   return `${h}:${m}:${s}`;
 }
 
-function TimerWidget({containerEl}) {
+function TimerWidget({containerEl, hostEl}) {
   const [people, setPeople] = useState(defaultPeople);
   const [index, setIndex] = useState(0);
   const [duration, setDuration] = useState(60);
   const [startTime, setStartTime] = useState(null);
+  const [pausedMs, setPausedMs] = useState(0);
   const [filterJiraByUser, setFilterJiraByUser] = useState(false);
   const [theme, setTheme] = useState("dark");
   const [visible, setVisible] = useState(true);
   const [display, setDisplay] = useState("00:00:00");
+  const [menuOpen, setMenuOpen] = useState(false);
   const secHandRef = useRef(null);
   const intervalRef = useRef(null);
+  const audioRef = useRef(null);
+  const menuRef = useRef(null);
+  const menuBtnRef = useRef(null);
 
   useEffect(() => {
     chrome.storage.sync.get(
@@ -141,8 +154,12 @@ function TimerWidget({containerEl}) {
         setDisplay("00:00:00");
         if (secHandRef.current)
           secHandRef.current.style.transform = "rotate(-180deg)";
-        const audio = document.getElementById("beep-sound");
-        audio && audio.play().catch(() => {});
+        if (audioRef.current) {
+          try {
+            audioRef.current.currentTime = 0;
+            audioRef.current.play().catch(() => {});
+          } catch {}
+        }
         return;
       }
       setDisplay(format(remaining));
@@ -162,11 +179,25 @@ function TimerWidget({containerEl}) {
     containerEl.classList.add(theme);
   }, [theme, containerEl]);
 
+  // Close menu on outside click (also outside widget)
+  useEffect(() => {
+    const onDocMouseDown = (e) => {
+      // If click happens outside hostEl, close menu
+      if (hostEl && !hostEl.contains(e.target)) {
+        setMenuOpen(false);
+        return;
+      }
+    };
+    document.addEventListener("mousedown", onDocMouseDown, true);
+    return () => document.removeEventListener("mousedown", onDocMouseDown, true);
+  }, [hostEl]);
+
   function playBeep() {
-    const beep = document.getElementById("beep-sound");
-    if (beep) {
-      beep.currentTime = 0;
-      beep.play().catch(() => {});
+    if (audioRef.current) {
+      try {
+        audioRef.current.currentTime = 0;
+        audioRef.current.play().catch(() => {});
+      } catch {}
     }
   }
 
@@ -189,23 +220,30 @@ function TimerWidget({containerEl}) {
     playBeep();
     if (!startTime) {
       if (filterJiraByUser && people[index]) changeJiraView(people[index]);
-      setStartTime(Date.now() + duration * 1000);
+      if (pausedMs > 0) {
+        setStartTime(Date.now() + pausedMs);
+        setPausedMs(0);
+      } else {
+        setStartTime(Date.now() + duration * 1000);
+      }
     }
   }
   function stop() {
     playBeep();
     clearInterval(intervalRef.current);
     intervalRef.current = null;
-    setStartTime(null);
-    setDisplay("00:00:00");
-    if (secHandRef.current) {
-      secHandRef.current.style.transform = "rotate(-180deg)";
+    if (startTime) {
+      const remaining = Math.max(0, startTime - Date.now());
+      setPausedMs(remaining);
+      setDisplay(format(remaining));
     }
+    setStartTime(null);
   }
   function reset() {
     clearInterval(intervalRef.current);
     intervalRef.current = null;
     setStartTime(null);
+    setPausedMs(0);
     setDisplay("00:00:00");
     if (secHandRef.current)
       secHandRef.current.style.transform = "rotate(-180deg)";
@@ -244,30 +282,31 @@ function TimerWidget({containerEl}) {
         <div className="relative inline-block text-left min-w-max">
           <button
             className="gipo-button"
-            onClick={(e) => {
-              const m = document.getElementById("menu-content");
-              m?.classList.toggle("hidden");
-            }}
+            ref={menuBtnRef}
+            onClick={() => setMenuOpen((v) => !v)}
           >
             ☰
           </button>
-          <div
-            id="menu-content"
-            className="hidden absolute left-0 mt-2 w-full bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded shadow-md z-20"
-          >
-            <button
-              className="flex w-full justify-center px-4 py-2 text-sm text-gray-700 dark:text-white hover:bg-gray-100 dark:hover:bg-gray-600"
-              onClick={toggleTheme}
+          {menuOpen && (
+            <div
+              id="menu-content"
+              ref={menuRef}
+              className="absolute left-0 mt-2 w-full bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded shadow-md z-20"
             >
-              {theme === "dark" ? "🌙" : "☀️"}
-            </button>
-            <button
-              className="flex w-full justify-center px-4 py-2 text-sm text-gray-700 dark:text-white hover:bg-gray-100 dark:hover:bg-gray-600"
-              onClick={openSettings}
-            >
-              ⚙️
-            </button>
-          </div>
+              <button
+                className="flex w-full justify-center px-4 py-2 text-sm text-gray-700 dark:text-white hover:bg-gray-100 dark:hover:bg-gray-600"
+                onClick={toggleTheme}
+              >
+                {theme === "dark" ? "🌙" : "☀️"}
+              </button>
+              <button
+                className="flex w-full justify-center px-4 py-2 text-sm text-gray-700 dark:text-white hover:bg-gray-100 dark:hover:bg-gray-600"
+                onClick={openSettings}
+              >
+                ⚙️
+              </button>
+            </div>
+          )}
         </div>
       </div>
       <div className="absolute top-1 right-1 z-10">
@@ -307,32 +346,71 @@ function TimerWidget({containerEl}) {
           ⏭
         </button>
       </div>
-      <audio
-        id="beep-sound"
-        src={chrome.runtime.getURL("assets/sounds/beep.mp3")}
-        preload="auto"
-      />
+      <audio ref={audioRef} src={chrome.runtime.getURL("assets/sounds/beep.mp3")} preload="auto" />
     </div>
   );
 }
 
 function mountApp() {
   if (document.getElementById("gipo-timer-widget")) return;
-  const doMount = () => {
+  const doMount = async () => {
     if (document.getElementById("gipo-timer-widget")) return;
     const host = document.createElement("div");
     host.id = "gipo-timer-widget";
-    host.style.right = "16px";
-    host.style.bottom = "16px";
     host.style.position = "fixed";
     host.style.zIndex = "9999";
+    host.style.outline = "none";
+    host.style.border = "none";
+    host.style.boxShadow = "none";
+    // Restore last saved position if present
+    try {
+      chrome.storage.sync.get(["widgetPosition"], (data) => {
+        const pos = data.widgetPosition;
+        if (pos && pos.left && pos.top) {
+          host.style.left = pos.left;
+          host.style.top = pos.top;
+          host.style.right = "auto";
+          host.style.bottom = "auto";
+        } else {
+          host.style.right = "16px";
+          host.style.bottom = "16px";
+        }
+      });
+    } catch {
+      host.style.right = "16px";
+      host.style.bottom = "16px";
+    }
+
     document.body.appendChild(host);
     makeDraggable(host);
-    const root = createRoot(host);
-    root.render(<TimerWidget containerEl={host} />);
+
+    // Attach shadow root to isolate widget styles from the page
+    const shadow = host.attachShadow({ mode: "open" });
+
+    // Inject Tailwind CSS into the shadow root (no global CSS leakage)
+    try {
+      const cssUrl = chrome.runtime.getURL("assets/styles/tailwind.css");
+      const res = await fetch(cssUrl);
+      const cssText = await res.text();
+      const styleEl = document.createElement("style");
+      styleEl.textContent = cssText;
+      shadow.appendChild(styleEl);
+    } catch (err) {
+      console.warn("Impossibile caricare CSS del widget:", err);
+    }
+
+    // React app container inside shadow DOM
+    const themeContainer = document.createElement("div");
+    shadow.appendChild(themeContainer);
+    // default theme dark until storage loads
+    themeContainer.classList.add("dark");
+    const appRoot = document.createElement("div");
+    themeContainer.appendChild(appRoot);
+    const root = createRoot(appRoot);
+    root.render(<TimerWidget containerEl={themeContainer} hostEl={host} />);
   };
   if (document.body) doMount();
-  else window.addEventListener("DOMContentLoaded", doMount, {once: true});
+  else window.addEventListener("DOMContentLoaded", doMount, { once: true });
 }
 
 // Mount immediately (or after DOM ready) if not present
