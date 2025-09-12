@@ -43,24 +43,37 @@ Tutto viene salvato automaticamente tramite `chrome.storage.sync`.
 
 ---
 
-## 🚀 Installazione
+## 🚀 Installazione (build prod)
 
 1. Clona o scarica questa repository.
-2. Apri `chrome://extensions/` nel browser.
-3. Attiva la **Modalità sviluppatore** in alto a destra.
-4. Clicca su **"Carica estensione non pacchettizzata"** e seleziona la cartella `gipo-utils-extension`.
+2. Installa le dipendenze: `npm install`.
+3. Esegui la build: `npm run build`.
+4. Apri `chrome://extensions/` nel browser.
+5. Attiva la **Modalità sviluppatore** in alto a destra.
+6. Clicca su **Carica estensione non pacchettizzata** e seleziona la cartella `dist`.
 
 ---
 
-## 📁 Struttura dei file
+## 📁 Struttura dei file (post‑refactor React)
 
-- `manifest.json` – Configurazione dell'estensione
-- `content.js` – Inietta il widget timer nella pagina
-- `options/options.html` – Pagina delle opzioni (timer e ruota)
-- `options/options.js` – Logica ruota e timer
-- `popup/popup.html` – Popup per accedere alla configurazione
-- `popup/popup.js` – Logica del popup per accedere alla configurazione
-- `assets/` – Icone, stili e script di supporto
+- `vite.config.js` – Configurazione Vite multipagina (popup, options, content)
+- `manifest.json` – Configurazione estensione (punti a `popup/index.html`, `options/index.html`, `content.js`)
+- `src/popup/*` – Popup in React
+- `src/options/*` – Pagina Opzioni in React (Timer, Wheel, Changelog)
+- `src/content/*` – Widget Timer in React come content script
+- `assets/` – Icone, suoni e fogli di stile (Tailwind)
+- `scripts/copy-to-dist.js` – Copia asset e riallinea gli HTML generati da Vite sotto `dist/`
+- `dist/` – Output di build pronto per Chrome (generato da `npm run build`)
+
+Nota: i vecchi file vanilla (`popup/*`, `options/*`, `content.js`) sono stati rimossi in favore della nuova struttura `src/*` con React.
+
+## 🛠️ Sviluppo
+
+- Build completa: `npm run build`
+- Solo CSS (Tailwind): `npm run build:css`
+- Solo Vite: `npm run build:vite`
+
+Carica sempre l’estensione dalla cartella `dist` dopo la build.
 
 ---
 
