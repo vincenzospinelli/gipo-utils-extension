@@ -225,6 +225,7 @@ function WheelTab() {
   const [winner, setWinner] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const [spinning, setSpinning] = useState(false);
+  const spinningRef = useRef(false);
   const angleRef = useRef(0);
   const velRef = useRef(0);
   const canvasRef = useRef(null);
@@ -318,11 +319,12 @@ function WheelTab() {
   }
 
   function animate() {
-    if (!spinning) return;
+    if (!spinningRef.current) return;
     angleRef.current += velRef.current;
     velRef.current *= 0.98;
     if (velRef.current < 0.002) {
       setSpinning(false);
+      spinningRef.current = false;
       const normalizedAngle =
         ((angleRef.current % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
       const step = (2 * Math.PI) / names.length;
@@ -352,6 +354,7 @@ function WheelTab() {
       return;
     }
     setSpinning(true);
+    spinningRef.current = true;
     setWinner("");
     setSelectedIndex(-1);
     velRef.current = Math.random() * 0.3 + 0.25;
@@ -373,6 +376,11 @@ function WheelTab() {
     setTextarea(defaultPeople.map((p) => p.name).join("\n"));
     chrome.storage.sync.set({peopleWithIds: defaultPeople});
     drawWheel(defaultPeople.map((p) => p.name));
+    // Reset motion refs
+    angleRef.current = 0;
+    velRef.current = 0;
+    setSpinning(false);
+    spinningRef.current = false;
   }
 
   function onShuffle() {
