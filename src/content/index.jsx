@@ -1,3 +1,15 @@
+import {
+  X as CloseIcon,
+  Menu as MenuIcon,
+  Moon,
+  Pause as PauseIcon,
+  Play as PlayIcon,
+  Settings,
+  SkipBack,
+  SkipForward,
+  Square,
+  Sun,
+} from "lucide-react";
 import {useEffect, useRef, useState} from "react";
 import {createRoot} from "react-dom/client";
 
@@ -189,7 +201,8 @@ function TimerWidget({containerEl, hostEl}) {
       }
     };
     document.addEventListener("mousedown", onDocMouseDown, true);
-    return () => document.removeEventListener("mousedown", onDocMouseDown, true);
+    return () =>
+      document.removeEventListener("mousedown", onDocMouseDown, true);
   }, [hostEl]);
 
   function playBeep() {
@@ -285,33 +298,41 @@ function TimerWidget({containerEl, hostEl}) {
             ref={menuBtnRef}
             onClick={() => setMenuOpen((v) => !v)}
           >
-            ☰
+            <MenuIcon size={16} />
           </button>
           {menuOpen && (
             <div
               id="menu-content"
               ref={menuRef}
-              className="absolute left-0 mt-2 w-full bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded shadow-md z-20"
+              className="absolute flex flex-col gap-2 left-0 mt-2 w-full bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded shadow-md z-20"
             >
               <button
-                className="flex w-full justify-center px-4 py-2 text-sm text-gray-700 dark:text-white hover:bg-gray-100 dark:hover:bg-gray-600"
+                className="flex w-full h-8 items-center justify-center gap-2 text-gray-700 dark:text-white hover:bg-gray-100 dark:hover:bg-gray-600 whitespace-nowrap"
                 onClick={toggleTheme}
               >
-                {theme === "dark" ? "🌙" : "☀️"}
+                {theme === "dark" ? (
+                  <Moon size={18} style={{color: "inherit"}} />
+                ) : (
+                  <Sun size={18} s style={{color: "inherit"}} />
+                )}
               </button>
               <button
-                className="flex w-full justify-center px-4 py-2 text-sm text-gray-700 dark:text-white hover:bg-gray-100 dark:hover:bg-gray-600"
+                className="flex w-full h-8 items-center justify-center gap-2 text-gray-700 dark:text-white hover:bg-gray-100 dark:hover:bg-gray-600 whitespace-nowrap"
                 onClick={openSettings}
               >
-                ⚙️
+                <Settings size={18} style={{color: "inherit"}} />
               </button>
             </div>
           )}
         </div>
       </div>
       <div className="absolute top-1 right-1 z-10">
-        <button className="gipo-button" onClick={hideWidget}>
-          X
+        <button
+          className="gipo-button"
+          onClick={hideWidget}
+          aria-label="Chiudi"
+        >
+          <CloseIcon size={14} />
         </button>
       </div>
       <div className="w-24 h-24 rounded-full border-4 border-black dark:border-white relative">
@@ -330,23 +351,35 @@ function TimerWidget({containerEl, hostEl}) {
         {display}
       </div>
       <div className="flex gap-2 flex-wrap justify-center items-center">
-        <button className="gipo-button" onClick={() => changePerson(-1)}>
-          ⏮
+        <button
+          className="gipo-button"
+          onClick={() => changePerson(-1)}
+          aria-label="Precedente"
+        >
+          <SkipBack size={16} />
         </button>
-        <button className="gipo-button" onClick={start}>
-          ▶
+        <button className="gipo-button" onClick={start} aria-label="Play">
+          <PlayIcon size={16} />
         </button>
-        <button className="gipo-button" onClick={stop}>
-          ⏸
+        <button className="gipo-button" onClick={stop} aria-label="Pausa">
+          <PauseIcon size={16} />
         </button>
-        <button className="gipo-button" onClick={reset}>
-          ⏹
+        <button className="gipo-button" onClick={reset} aria-label="Reset">
+          <Square size={16} />
         </button>
-        <button className="gipo-button" onClick={() => changePerson(1)}>
-          ⏭
+        <button
+          className="gipo-button"
+          onClick={() => changePerson(1)}
+          aria-label="Successivo"
+        >
+          <SkipForward size={16} />
         </button>
       </div>
-      <audio ref={audioRef} src={chrome.runtime.getURL("assets/sounds/beep.mp3")} preload="auto" />
+      <audio
+        ref={audioRef}
+        src={chrome.runtime.getURL("assets/sounds/beep.mp3")}
+        preload="auto"
+      />
     </div>
   );
 }
@@ -385,7 +418,7 @@ function mountApp() {
     makeDraggable(host);
 
     // Attach shadow root to isolate widget styles from the page
-    const shadow = host.attachShadow({ mode: "open" });
+    const shadow = host.attachShadow({mode: "open"});
 
     // Inject Tailwind CSS into the shadow root (no global CSS leakage)
     try {
@@ -410,7 +443,7 @@ function mountApp() {
     root.render(<TimerWidget containerEl={themeContainer} hostEl={host} />);
   };
   if (document.body) doMount();
-  else window.addEventListener("DOMContentLoaded", doMount, { once: true });
+  else window.addEventListener("DOMContentLoaded", doMount, {once: true});
 }
 
 // Mount immediately (or after DOM ready) if not present
