@@ -1,3 +1,14 @@
+## [2.0.0] - 2025-09-12
+
+### Breaking changes
+
+- Migrazione architetturale: popup, options e content widget ora sono in React + Vite.
+
+### Fix
+
+- Rimossi outline/bordi indesiderati attorno al widget.
+- Nessuna collisione di stili con i siti.
+
 ## [1.1.3] - 2025-07-06
 
 ### ✨ Nuove funzionalità
