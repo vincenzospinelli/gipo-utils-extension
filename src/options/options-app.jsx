@@ -111,33 +111,40 @@ function TimerTab() {
     );
   }, []);
 
-  const updatePerson = (idx, field, value) => {
-    setPeople((prev) =>
-      prev.map((p, i) => (i === idx ? {...p, [field]: value} : p))
-    );
-  };
-  const addPerson = () =>
-    setPeople((prev) => [...prev, {name: "", jiraId: ""}]);
-  const removePerson = (idx) =>
-    setPeople((prev) => prev.filter((_, i) => i !== idx));
-
-  const save = () => {
-    const cleaned = people
+  const persistPeople = (list) => {
+    const cleaned = list
       .filter((p) => p.name?.trim())
       .map((p) => ({name: p.name.trim(), jiraId: (p.jiraId || "").trim()}));
-    const dur = parseInt(duration, 10) || defaultDuration;
-    chrome.storage.sync.set(
-      {
-        peopleWithIds: cleaned,
-        duration: dur,
-        audioMuted: !soundsEnabled,
-        audioVolume: Math.max(0, Math.min(1, audioVolume / 100)),
-      },
-      () => {
-        setStatus("Salvato!");
-        setTimeout(() => setStatus(""), 2000);
-      }
-    );
+    chrome.storage.sync.set({peopleWithIds: cleaned});
+  };
+
+  const updatePerson = (idx, field, value) => {
+    setPeople((prev) => {
+      const next = prev.map((p, i) => (i === idx ? {...p, [field]: value} : p));
+      persistPeople(next);
+      return next;
+    });
+  };
+  const addPerson = () =>
+    setPeople((prev) => {
+      const next = [...prev, {name: "", jiraId: ""}];
+      persistPeople(next);
+      return next;
+    });
+  const removePerson = (idx) =>
+    setPeople((prev) => {
+      const next = prev.filter((_, i) => i !== idx);
+      persistPeople(next);
+      return next;
+    });
+
+  // Live-save duration as user types
+  const onDurationChange = (val) => {
+    const n = parseInt(val, 10);
+    setDuration(val);
+    if (!Number.isNaN(n) && n > 0) {
+      chrome.storage.sync.set({duration: n});
+    }
   };
 
   const toggleFilter = (checked) => {
@@ -165,7 +172,7 @@ function TimerTab() {
         placeholder="60"
         min={1}
         value={duration}
-        onChange={(e) => setDuration(e.target.value)}
+        onChange={(e) => onDurationChange(e.target.value)}
         className="w-full p-3 border border-gray-300 rounded mb-4 focus:outline-none focus:ring focus:border-blue-500"
       />
 
@@ -231,7 +238,14 @@ function TimerTab() {
           type="checkbox"
           id="timer-sounds-enabled"
           checked={soundsEnabled}
-          onChange={(e) => setSoundsEnabled(e.target.checked)}
+          onChange={(e) => {
+            const enabled = e.target.checked;
+            setSoundsEnabled(enabled);
+            chrome.storage.sync.set({
+              audioMuted: !enabled,
+              audioVolume: Math.max(0, Math.min(1, audioVolume / 100)),
+            });
+          }}
           className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
         />
         <label
@@ -255,19 +269,17 @@ function TimerTab() {
         max={100}
         step={1}
         value={audioVolume}
-        onChange={(e) => setAudioVolume(parseInt(e.target.value, 10))}
+        onChange={(e) => {
+          const vol = parseInt(e.target.value, 10);
+          setAudioVolume(vol);
+          chrome.storage.sync.set({
+            audioMuted: !soundsEnabled,
+            audioVolume: Math.max(0, Math.min(1, vol / 100)),
+          });
+        }}
         className="w-full mb-4"
       />
-      <button
-        id="save"
-        onClick={save}
-        className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded mb-2"
-      >
-        Salva
-      </button>
-      <div id="status" className="text-sm text-green-600 h-5">
-        {status}
-      </div>
+      <div id="status" className="text-sm text-green-600 h-5">{status}</div>
     </div>
   );
 }
@@ -292,16 +304,31 @@ function WheelTab() {
   const confettiCtxRef = useRef(null);
   const confettiParticlesRef = useRef([]);
   const wheelAudioRef = useRef(null);
+  const [wheelSoundsEnabled, setWheelSoundsEnabled] = useState(true);
+  const [wheelAudioVolume, setWheelAudioVolume] = useState(10); // percent 0..100
   // Post-win animation state
   const winnerAnimatingRef = useRef(false);
   const winnerPulseRef = useRef(0); // 0..1 amplitude used by drawWheel for the selected slice
 
   useEffect(() => {
-    chrome.storage.sync.get(["peopleWithIds"], (data) => {
+    chrome.storage.sync.get(["peopleWithIds", "wheelAudioMuted", "wheelAudioVolume"], (data) => {
       const pw = data.peopleWithIds || defaultPeople;
       setPeople(pw);
       setTextarea(pw.map((p) => p.name).join("\n"));
       drawWheel(pw.map((p) => p.name));
+      // audio settings
+      const vol =
+        typeof data.wheelAudioVolume === "number"
+          ? Math.max(0, Math.min(100, Math.round(data.wheelAudioVolume * 100)))
+          : 10;
+      setWheelSoundsEnabled(!Boolean(data.wheelAudioMuted));
+      setWheelAudioVolume(vol);
+      // apply volume to audio element
+      if (wheelAudioRef.current) {
+        wheelAudioRef.current.volume = (!data.wheelAudioMuted)
+          ? Math.max(0, Math.min(1, vol / 100))
+          : 0;
+      }
     });
     const c = confettiCanvasRef.current;
     if (c) {
@@ -309,6 +336,15 @@ function WheelTab() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Keep wheel audio element in sync when user changes controls
+  useEffect(() => {
+    if (wheelAudioRef.current) {
+      wheelAudioRef.current.volume = wheelSoundsEnabled
+        ? Math.max(0, Math.min(1, wheelAudioVolume / 100))
+        : 0;
+    }
+  }, [wheelSoundsEnabled, wheelAudioVolume]);
 
   const names = useMemo(
     () =>
@@ -422,7 +458,12 @@ function WheelTab() {
       angleRef.current += delta; // apply snap correction
       startConfetti();
       try {
-        wheelAudioRef.current?.play?.();
+        if (wheelSoundsEnabled) {
+          if (wheelAudioRef.current) {
+            wheelAudioRef.current.volume = Math.max(0, Math.min(1, wheelAudioVolume / 100));
+          }
+          wheelAudioRef.current?.play?.();
+        }
       } catch {}
       setLastWinner(selectedPerson);
       lastWinnerRef.current = selectedPerson;
@@ -488,15 +529,19 @@ function WheelTab() {
     requestAnimationFrame(animate);
   }
 
-  function onSaveWheel() {
-    const peopleNames = names;
-    const updated = peopleNames.map((name) => {
-      const found = people.find((p) => p.name === name);
-      return found || {name};
-    });
-    setPeople(updated);
-    chrome.storage.sync.set({peopleWithIds: updated});
-  }
+  // Auto-save the wheel list when the textarea changes (debounced)
+  useEffect(() => {
+    const handle = setTimeout(() => {
+      const updated = names.map((name) => {
+        const found = people.find((p) => p.name === name);
+        return found || {name};
+      });
+      setPeople(updated);
+      chrome.storage.sync.set({peopleWithIds: updated});
+    }, 300);
+    return () => clearTimeout(handle);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [names]);
 
   function onReset() {
     setPeople(defaultPeople);
@@ -605,7 +650,7 @@ function WheelTab() {
             onChange={(e) => setTextarea(e.target.value)}
             className="w-full p-3 border border-gray-300 rounded mb-4 focus:outline-none focus:ring focus:border-blue-500"
           ></textarea>
-          <div className="flex gap-2">
+        <div className="flex gap-2">
             <button
               id="spin"
               onClick={onSpin}
@@ -617,13 +662,6 @@ function WheelTab() {
               }`}
             >
               {spinning ? "Girando…" : "Gira"}
-            </button>
-            <button
-              id="wheel-save"
-              onClick={onSaveWheel}
-              className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded"
-            >
-              Salva
             </button>
             <button
               id="wheel-shuffle"
@@ -644,6 +682,47 @@ function WheelTab() {
             id="wheel-status"
             className="text-sm text-green-600 h-5 mt-2"
           ></div>
+          <div className="mt-4">
+            <div className="flex items-center gap-2 mb-2">
+              <input
+                type="checkbox"
+                id="wheel-sounds-enabled"
+                checked={wheelSoundsEnabled}
+                onChange={(e) => {
+                  const enabled = e.target.checked;
+                  setWheelSoundsEnabled(enabled);
+                  chrome.storage.sync.set({
+                    wheelAudioMuted: !enabled,
+                    wheelAudioVolume: Math.max(0, Math.min(1, wheelAudioVolume / 100)),
+                  });
+                }}
+                className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+              />
+              <label htmlFor="wheel-sounds-enabled" className="text-sm font-medium text-gray-700">
+                Suono proclamazione vincitore abilitato
+              </label>
+            </div>
+            <label htmlFor="wheel-audio-volume" className="block text-sm font-medium text-gray-700 mb-1">
+              Volume suono: {wheelAudioVolume}%
+            </label>
+            <input
+              type="range"
+              id="wheel-audio-volume"
+              min={0}
+              max={100}
+              step={1}
+              value={wheelAudioVolume}
+              onChange={(e) => {
+                const vol = parseInt(e.target.value, 10);
+                setWheelAudioVolume(vol);
+                chrome.storage.sync.set({
+                  wheelAudioMuted: !wheelSoundsEnabled,
+                  wheelAudioVolume: Math.max(0, Math.min(1, vol / 100)),
+                });
+              }}
+              className="w-full"
+            />
+          </div>
         </div>
       </div>
       <canvas
@@ -653,7 +732,7 @@ function WheelTab() {
       ></canvas>
       <audio
         ref={wheelAudioRef}
-        src={chrome.runtime.getURL("assets/sounds/beep.mp3")}
+        src={chrome.runtime.getURL("assets/sounds/lose.mp3")}
         preload="auto"
       />
     </div>

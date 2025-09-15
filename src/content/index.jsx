@@ -330,6 +330,88 @@ function TimerWidget({containerEl, hostEl}) {
     return () => chrome.runtime.onMessage.removeListener(handler);
   }, []);
 
+  // React to option changes (live sync for audio, duration, theme, visibility, people, filters)
+  useEffect(() => {
+    const onStorageChanged = (changes, areaName) => {
+      if (areaName !== "sync") return;
+      if (changes.audioMuted) {
+        setAudioMuted(Boolean(changes.audioMuted.newValue));
+      }
+      if (changes.audioVolume) {
+        const v = changes.audioVolume.newValue;
+        setAudioVolume(
+          typeof v === "number" ? Math.max(0, Math.min(1, v)) : 0.1
+        );
+      }
+      if (changes.duration) {
+        const newD = parseInt(changes.duration.newValue, 10);
+        const oldD = parseInt(changes.duration.oldValue, 10);
+        if (!Number.isNaN(newD) && newD > 0) {
+          setDuration(newD);
+          const now = Date.now();
+          const oldMs = !Number.isNaN(oldD) && oldD > 0 ? oldD * 1000 : null;
+          if (startTime) {
+            // Active countdown: keep the same completion fraction
+            const remaining = Math.max(0, startTime - now);
+            let newRemaining = remaining;
+            if (oldMs && oldMs > 0) {
+              const frac = Math.max(0, Math.min(1, remaining / oldMs));
+              newRemaining = Math.round(frac * newD * 1000);
+            } else {
+              newRemaining = Math.round(newD * 1000);
+            }
+            setStartTime(now + newRemaining);
+            setDisplay(format(newRemaining));
+            // update second hand immediately
+            const secondsRemaining = Math.max(0, Math.floor(newRemaining / 1000));
+            const secondDeg = (60 - secondsRemaining) * 6 - 180;
+            if (secHandRef.current)
+              secHandRef.current.style.transform = `rotate(${secondDeg}deg)`;
+          } else if (pausedMs > 0) {
+            // Paused: rescale the paused remaining time
+            if (oldMs && oldMs > 0) {
+              const frac = Math.max(0, Math.min(1, pausedMs / oldMs));
+              const newPaused = Math.round(frac * newD * 1000);
+              setPausedMs(newPaused);
+              setDisplay(format(newPaused));
+            } else {
+              const newPaused = Math.round(newD * 1000);
+              setPausedMs(newPaused);
+              setDisplay(format(newPaused));
+            }
+          }
+        }
+      }
+      if (changes.theme) {
+        const t = changes.theme.newValue;
+        if (t === "light" || t === "dark") setTheme(t);
+      }
+      if (changes.widgetVisible) {
+        setVisible(changes.widgetVisible.newValue !== false);
+      }
+      if (changes.filterJiraByUser) {
+        setFilterJiraByUser(Boolean(changes.filterJiraByUser.newValue));
+      }
+      if (changes.peopleWithIds) {
+        const p = Array.isArray(changes.peopleWithIds.newValue)
+          ? changes.peopleWithIds.newValue
+          : defaultPeople;
+        const cleaned = p
+          .filter((x) => x && x.name)
+          .map((x) => ({name: x.name, jiraId: x.jiraId}));
+        setPeople(cleaned);
+        // ensure current index is within bounds
+        setIndex((idx) => (cleaned.length ? Math.min(idx, cleaned.length - 1) : 0));
+      }
+    };
+    try {
+      chrome.storage.onChanged.addListener(onStorageChanged);
+      return () => chrome.storage.onChanged.removeListener(onStorageChanged);
+    } catch {
+      return () => {};
+    }
+  }, []);
+
   if (!visible) return null;
 
   const current = people[index]?.name || "Nessuno selezionato";
