@@ -1,11 +1,16 @@
-## [2.0.0] - 2025-09-12
+## [2.1.0] - 2025-09-15
 
-### Breaking changes
+### ✨ Nuove funzionalità
 
 - Migrazione architetturale: popup, options e content widget ora sono in React + Vite.
+- GipoTimer: tick sonoro di sottofondo durante il countdown; impostazioni audio con mute e volume; salvataggio live con toast.
+- GipoWheel: suono di proclamazione vincitore con mute e volume; lista persone con salvataggio automatico e toast.
+- Changelog: rendering del changelog in Markdown formattato.
 
-### Fix
+### 🐛 Fix
 
+- Timer: arresto affidabile del tick su stop/fine/reset.
+- Ruota: eliminato il disallineamento tra freccia e vincitore.
 - Rimossi outline/bordi indesiderati attorno al widget.
 - Nessuna collisione di stili con i siti.
 
