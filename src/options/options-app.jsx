@@ -78,15 +78,29 @@ function TimerTab() {
   const [people, setPeople] = useState(defaultPeople);
   const [duration, setDuration] = useState(defaultDuration);
   const [filterJiraByUser, setFilterJiraByUser] = useState(false);
+  const [soundsEnabled, setSoundsEnabled] = useState(true);
+  const [audioVolume, setAudioVolume] = useState(10);
   const [status, setStatus] = useState("");
 
   useEffect(() => {
     chrome.storage.sync.get(
-      ["peopleWithIds", "duration", "filterJiraByUser"],
+      [
+        "peopleWithIds",
+        "duration",
+        "filterJiraByUser",
+        "audioMuted",
+        "audioVolume",
+      ],
       (data) => {
         setPeople(data.peopleWithIds || defaultPeople);
         setDuration(parseInt(data.duration, 10) || defaultDuration);
         setFilterJiraByUser(Boolean(data.filterJiraByUser));
+        setSoundsEnabled(!Boolean(data.audioMuted));
+        setAudioVolume(
+          typeof data.audioVolume === "number"
+            ? Math.max(0, Math.min(100, Math.round(data.audioVolume * 100)))
+            : 10
+        );
         if (!data.peopleWithIds || !data.duration) {
           chrome.storage.sync.set({
             peopleWithIds: data.peopleWithIds || defaultPeople,
@@ -112,10 +126,18 @@ function TimerTab() {
       .filter((p) => p.name?.trim())
       .map((p) => ({name: p.name.trim(), jiraId: (p.jiraId || "").trim()}));
     const dur = parseInt(duration, 10) || defaultDuration;
-    chrome.storage.sync.set({peopleWithIds: cleaned, duration: dur}, () => {
-      setStatus("Salvato!");
-      setTimeout(() => setStatus(""), 2000);
-    });
+    chrome.storage.sync.set(
+      {
+        peopleWithIds: cleaned,
+        duration: dur,
+        audioMuted: !soundsEnabled,
+        audioVolume: Math.max(0, Math.min(1, audioVolume / 100)),
+      },
+      () => {
+        setStatus("Salvato!");
+        setTimeout(() => setStatus(""), 2000);
+      }
+    );
   };
 
   const toggleFilter = (checked) => {
@@ -203,6 +225,39 @@ function TimerTab() {
           Filtra la board Jira per utente (Beta)
         </label>
       </div>
+
+      <div className="flex items-center gap-2 mb-2">
+        <input
+          type="checkbox"
+          id="timer-sounds-enabled"
+          checked={soundsEnabled}
+          onChange={(e) => setSoundsEnabled(e.target.checked)}
+          className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+        />
+        <label
+          htmlFor="timer-sounds-enabled"
+          className="text-sm font-medium text-gray-700"
+        >
+          Suoni timer abilitati (beep e tick)
+        </label>
+      </div>
+
+      <label
+        htmlFor="timer-audio-volume"
+        className="block text-sm font-medium text-gray-700 mb-1"
+      >
+        Volume suoni: {audioVolume}%
+      </label>
+      <input
+        type="range"
+        id="timer-audio-volume"
+        min={0}
+        max={100}
+        step={1}
+        value={audioVolume}
+        onChange={(e) => setAudioVolume(parseInt(e.target.value, 10))}
+        className="w-full mb-4"
+      />
       <button
         id="save"
         onClick={save}
@@ -302,13 +357,14 @@ function WheelTab() {
     namesList.forEach((name, i) => {
       ctx.beginPath();
       const isSelected = i === selectedIndex;
-      const r = isSelected ? radius + 12 * Math.max(0, Math.min(1, winnerPulseRef.current)) : radius;
+      const r = isSelected
+        ? radius + 12 * Math.max(0, Math.min(1, winnerPulseRef.current))
+        : radius;
       ctx.moveTo(0, 0);
       ctx.arc(0, 0, r, i * step, (i + 1) * step);
-      ctx.fillStyle =
-        isSelected
-          ? `hsl(${(i * 360) / namesList.length}, 90%, 50%)`
-          : `hsl(${(i * 360) / namesList.length}, 70%, 70%)`;
+      ctx.fillStyle = isSelected
+        ? `hsl(${(i * 360) / namesList.length}, 90%, 50%)`
+        : `hsl(${(i * 360) / namesList.length}, 70%, 70%)`;
       ctx.fill();
       ctx.stroke();
 
@@ -361,10 +417,13 @@ function WheelTab() {
       // Snap the wheel so the center of the winning sector aligns exactly with the pointer
       const centerOfIndex = index * step + step / 2; // wheel coords
       const targetNormalized = (POINTER - centerOfIndex + TAU) % TAU; // canvas coords
-      const delta = ((targetNormalized - normalizedAngle + Math.PI) % TAU) - Math.PI; // shortest delta
+      const delta =
+        ((targetNormalized - normalizedAngle + Math.PI) % TAU) - Math.PI; // shortest delta
       angleRef.current += delta; // apply snap correction
       startConfetti();
-      try { wheelAudioRef.current?.play?.(); } catch {}
+      try {
+        wheelAudioRef.current?.play?.();
+      } catch {}
       setLastWinner(selectedPerson);
       lastWinnerRef.current = selectedPerson;
 
@@ -592,7 +651,11 @@ function WheelTab() {
         id="confetti-canvas"
         className="fixed top-0 left-0 w-full h-full pointer-events-none z-50"
       ></canvas>
-      <audio ref={wheelAudioRef} src={chrome.runtime.getURL("assets/sounds/beep.mp3")} preload="auto" />
+      <audio
+        ref={wheelAudioRef}
+        src={chrome.runtime.getURL("assets/sounds/beep.mp3")}
+        preload="auto"
+      />
     </div>
   );
 }

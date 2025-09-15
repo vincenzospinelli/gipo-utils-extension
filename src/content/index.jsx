@@ -125,6 +125,8 @@ function TimerWidget({containerEl, hostEl}) {
   const [visible, setVisible] = useState(true);
   const [display, setDisplay] = useState("00:00:00");
   const [menuOpen, setMenuOpen] = useState(false);
+  const [audioMuted, setAudioMuted] = useState(false);
+  const [audioVolume, setAudioVolume] = useState(0.1);
   const secHandRef = useRef(null);
   const intervalRef = useRef(null);
   const audioRef = useRef(null);
@@ -140,6 +142,8 @@ function TimerWidget({containerEl, hostEl}) {
         "filterJiraByUser",
         "theme",
         "widgetVisible",
+        "audioMuted",
+        "audioVolume",
       ],
       (data) => {
         const p = data.peopleWithIds || defaultPeople;
@@ -152,14 +156,25 @@ function TimerWidget({containerEl, hostEl}) {
         setFilterJiraByUser(Boolean(data.filterJiraByUser));
         setTheme(data.theme || "dark");
         setVisible(data.widgetVisible !== false);
+        setAudioMuted(Boolean(data.audioMuted));
+        setAudioVolume(
+          typeof data.audioVolume === "number"
+            ? Math.max(0, Math.min(1, data.audioVolume))
+            : 0.1
+        );
       }
     );
   }, []);
 
+  // keep audio elements in sync with settings
+  useEffect(() => {
+    if (audioRef.current) audioRef.current.volume = audioMuted ? 0 : audioVolume;
+    if (tickAudioRef.current) tickAudioRef.current.volume = audioMuted ? 0 : audioVolume;
+  }, [audioMuted, audioVolume]);
+
   useEffect(() => {
     if (!startTime) return;
     const tick = () => {
-      tickAudioRef.current.volume = 0.1;
       const remaining = startTime - Date.now();
       if (remaining <= 0) {
         clearInterval(intervalRef.current);
@@ -175,7 +190,7 @@ function TimerWidget({containerEl, hostEl}) {
             tickAudioRef.current.currentTime = 0;
           } catch {}
         }
-        if (audioRef.current) {
+        if (!audioMuted && audioRef.current) {
           try {
             audioRef.current.currentTime = 0;
             audioRef.current.play().catch(() => {});
@@ -189,7 +204,7 @@ function TimerWidget({containerEl, hostEl}) {
       if (secHandRef.current)
         secHandRef.current.style.transform = `rotate(${secondDeg}deg)`;
       // play ticking sound every second
-      if (tickAudioRef.current) {
+      if (!audioMuted && tickAudioRef.current) {
         try {
           tickAudioRef.current.currentTime = 0;
           tickAudioRef.current.play().catch(() => {});
@@ -222,6 +237,7 @@ function TimerWidget({containerEl, hostEl}) {
   }, [hostEl]);
 
   function playBeep() {
+    if (audioMuted) return;
     if (audioRef.current) {
       try {
         audioRef.current.currentTime = 0;
