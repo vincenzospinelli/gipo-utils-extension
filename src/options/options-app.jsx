@@ -1,5 +1,30 @@
 import {useEffect, useMemo, useRef, useState} from "react";
 
+// Small helpers
+const clamp = (n, min, max) => Math.max(min, Math.min(max, n));
+const unitToPercent = (u) => Math.round(clamp(u ?? 0, 0, 1) * 100);
+const percentToUnit = (p) => clamp((parseInt(p, 10) || 0) / 100, 0, 1);
+
+// Tiny toast hook + component
+function useAutoToast(timeout = 1200) {
+  const [message, setMessage] = useState("");
+  const timer = useRef(null);
+  const show = (msg = "Impostazioni salvate") => {
+    setMessage(msg);
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => setMessage(""), timeout);
+  };
+  useEffect(() => () => timer.current && clearTimeout(timer.current), []);
+  return {toastMessage: message, showToast: show};
+}
+
+const Toast = ({message}) =>
+  message ? (
+    <div className="fixed top-16 right-6 z-50 bg-gray-900 text-white text-sm px-3 py-2 rounded shadow">
+      {message}
+    </div>
+  ) : null;
+
 const defaultPeople = [
   {name: "Alessandro M", jiraId: ""},
   {name: "Claudio B", jiraId: ""},
@@ -80,7 +105,6 @@ function TimerTab() {
   const [filterJiraByUser, setFilterJiraByUser] = useState(false);
   const [soundsEnabled, setSoundsEnabled] = useState(true);
   const [audioVolume, setAudioVolume] = useState(10);
-  const [status, setStatus] = useState("");
 
   useEffect(() => {
     chrome.storage.sync.get(
@@ -98,7 +122,7 @@ function TimerTab() {
         setSoundsEnabled(!Boolean(data.audioMuted));
         setAudioVolume(
           typeof data.audioVolume === "number"
-            ? Math.max(0, Math.min(100, Math.round(data.audioVolume * 100)))
+            ? unitToPercent(data.audioVolume)
             : 10
         );
         if (!data.peopleWithIds || !data.duration) {
@@ -111,11 +135,14 @@ function TimerTab() {
     );
   }, []);
 
+  const {toastMessage: timerToast, showToast: showTimerToast} = useAutoToast();
+
   const persistPeople = (list) => {
     const cleaned = list
       .filter((p) => p.name?.trim())
       .map((p) => ({name: p.name.trim(), jiraId: (p.jiraId || "").trim()}));
     chrome.storage.sync.set({peopleWithIds: cleaned});
+    showTimerToast();
   };
 
   const updatePerson = (idx, field, value) => {
@@ -144,12 +171,14 @@ function TimerTab() {
     setDuration(val);
     if (!Number.isNaN(n) && n > 0) {
       chrome.storage.sync.set({duration: n});
+      showTimerToast();
     }
   };
 
   const toggleFilter = (checked) => {
     setFilterJiraByUser(checked);
     chrome.storage.sync.set({filterJiraByUser: checked});
+    showTimerToast();
   };
 
   return (
@@ -245,6 +274,7 @@ function TimerTab() {
               audioMuted: !enabled,
               audioVolume: Math.max(0, Math.min(1, audioVolume / 100)),
             });
+            showTimerToast();
           }}
           className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
         />
@@ -276,10 +306,11 @@ function TimerTab() {
             audioMuted: !soundsEnabled,
             audioVolume: Math.max(0, Math.min(1, vol / 100)),
           });
+          showTimerToast();
         }}
         className="w-full mb-4"
       />
-      <div id="status" className="text-sm text-green-600 h-5">{status}</div>
+      <Toast message={timerToast} />
     </div>
   );
 }
@@ -304,32 +335,38 @@ function WheelTab() {
   const confettiCtxRef = useRef(null);
   const confettiParticlesRef = useRef([]);
   const wheelAudioRef = useRef(null);
+  const {toastMessage: wheelToast, showToast: showWheelToast} = useAutoToast();
   const [wheelSoundsEnabled, setWheelSoundsEnabled] = useState(true);
   const [wheelAudioVolume, setWheelAudioVolume] = useState(10); // percent 0..100
   // Post-win animation state
   const winnerAnimatingRef = useRef(false);
   const winnerPulseRef = useRef(0); // 0..1 amplitude used by drawWheel for the selected slice
+  const TAU = 2 * Math.PI;
+  const POINTER = Math.PI / 2; // pointer at South in canvas coordinates (0 = East)
 
   useEffect(() => {
-    chrome.storage.sync.get(["peopleWithIds", "wheelAudioMuted", "wheelAudioVolume"], (data) => {
-      const pw = data.peopleWithIds || defaultPeople;
-      setPeople(pw);
-      setTextarea(pw.map((p) => p.name).join("\n"));
-      drawWheel(pw.map((p) => p.name));
-      // audio settings
-      const vol =
-        typeof data.wheelAudioVolume === "number"
-          ? Math.max(0, Math.min(100, Math.round(data.wheelAudioVolume * 100)))
-          : 10;
-      setWheelSoundsEnabled(!Boolean(data.wheelAudioMuted));
-      setWheelAudioVolume(vol);
-      // apply volume to audio element
-      if (wheelAudioRef.current) {
-        wheelAudioRef.current.volume = (!data.wheelAudioMuted)
-          ? Math.max(0, Math.min(1, vol / 100))
-          : 0;
+    chrome.storage.sync.get(
+      ["peopleWithIds", "wheelAudioMuted", "wheelAudioVolume"],
+      (data) => {
+        const pw = data.peopleWithIds || defaultPeople;
+        setPeople(pw);
+        setTextarea(pw.map((p) => p.name).join("\n"));
+        drawWheel(pw.map((p) => p.name));
+        // audio settings
+        const vol =
+          typeof data.wheelAudioVolume === "number"
+            ? unitToPercent(data.wheelAudioVolume)
+            : 10;
+        setWheelSoundsEnabled(!Boolean(data.wheelAudioMuted));
+        setWheelAudioVolume(vol);
+        // apply volume to audio element
+        if (wheelAudioRef.current) {
+          wheelAudioRef.current.volume = !data.wheelAudioMuted
+            ? percentToUnit(vol)
+            : 0;
+        }
       }
-    });
+    );
     const c = confettiCanvasRef.current;
     if (c) {
       confettiCtxRef.current = c.getContext("2d");
@@ -438,11 +475,8 @@ function WheelTab() {
     if (now >= spinEndRef.current) {
       setSpinning(false);
       spinningRef.current = false;
-      const TAU = 2 * Math.PI;
       const normalizedAngle = ((angleRef.current % TAU) + TAU) % TAU;
       const step = TAU / names.length;
-      // Pointer at South in canvas coordinates (0 = East)
-      const POINTER = Math.PI / 2;
       // Angle of pointer expressed in wheel coordinates
       const pointerAngle = (TAU - normalizedAngle + POINTER) % TAU;
       // Sector under the pointer (by containment)
@@ -458,11 +492,9 @@ function WheelTab() {
       angleRef.current += delta; // apply snap correction
       startConfetti();
       try {
-        if (wheelSoundsEnabled) {
-          if (wheelAudioRef.current) {
-            wheelAudioRef.current.volume = Math.max(0, Math.min(1, wheelAudioVolume / 100));
-          }
-          wheelAudioRef.current?.play?.();
+        if (wheelSoundsEnabled && wheelAudioRef.current) {
+          wheelAudioRef.current.volume = percentToUnit(wheelAudioVolume);
+          wheelAudioRef.current.play?.();
         }
       } catch {}
       setLastWinner(selectedPerson);
@@ -538,6 +570,7 @@ function WheelTab() {
       });
       setPeople(updated);
       chrome.storage.sync.set({peopleWithIds: updated});
+      showWheelToast();
     }, 300);
     return () => clearTimeout(handle);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -547,6 +580,7 @@ function WheelTab() {
     setPeople(defaultPeople);
     setTextarea(defaultPeople.map((p) => p.name).join("\n"));
     chrome.storage.sync.set({peopleWithIds: defaultPeople});
+    showWheelToast();
     drawWheel(defaultPeople.map((p) => p.name));
     // Reset motion refs
     angleRef.current = 0;
@@ -569,6 +603,7 @@ function WheelTab() {
     );
     setPeople(shuffledPeople);
     chrome.storage.sync.set({peopleWithIds: shuffledPeople});
+    showWheelToast();
     drawWheel(arr);
   }
 
@@ -650,7 +685,7 @@ function WheelTab() {
             onChange={(e) => setTextarea(e.target.value)}
             className="w-full p-3 border border-gray-300 rounded mb-4 focus:outline-none focus:ring focus:border-blue-500"
           ></textarea>
-        <div className="flex gap-2">
+          <div className="flex gap-2">
             <button
               id="spin"
               onClick={onSpin}
@@ -693,16 +728,26 @@ function WheelTab() {
                   setWheelSoundsEnabled(enabled);
                   chrome.storage.sync.set({
                     wheelAudioMuted: !enabled,
-                    wheelAudioVolume: Math.max(0, Math.min(1, wheelAudioVolume / 100)),
+                    wheelAudioVolume: Math.max(
+                      0,
+                      Math.min(1, wheelAudioVolume / 100)
+                    ),
                   });
+                  showWheelToast();
                 }}
                 className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
               />
-              <label htmlFor="wheel-sounds-enabled" className="text-sm font-medium text-gray-700">
+              <label
+                htmlFor="wheel-sounds-enabled"
+                className="text-sm font-medium text-gray-700"
+              >
                 Suono proclamazione vincitore abilitato
               </label>
             </div>
-            <label htmlFor="wheel-audio-volume" className="block text-sm font-medium text-gray-700 mb-1">
+            <label
+              htmlFor="wheel-audio-volume"
+              className="block text-sm font-medium text-gray-700 mb-1"
+            >
               Volume suono: {wheelAudioVolume}%
             </label>
             <input
@@ -719,10 +764,12 @@ function WheelTab() {
                   wheelAudioMuted: !wheelSoundsEnabled,
                   wheelAudioVolume: Math.max(0, Math.min(1, vol / 100)),
                 });
+                showWheelToast();
               }}
               className="w-full"
             />
           </div>
+          <Toast message={wheelToast} />
         </div>
       </div>
       <canvas
@@ -771,21 +818,26 @@ function ChangelogTab() {
 
     const inline = (text) => {
       const e = escape(text);
-      return e
-        // bold
-        .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-        // italics
-        .replace(/(^|[^*])\*(?!\s)(.+?)(?!\s)\*(?!\*)/g, "$1<em>$2</em>")
-        .replace(/(^|[^_])_(?!\s)(.+?)(?!\s)_(?!_)/g, "$1<em>$2</em>")
-        // strikethrough
-        .replace(/~~(.+?)~~/g, "<del>$1</del>")
-        // inline code
-        .replace(/`([^`]+?)`/g, "<code>$1</code>")
-        // links
-        .replace(/\[([^\]]+)\]\(([^)\s]+)(?:\s+\"([^\"]*)\")?\)/g, (m, t, url, title) => {
-          const tt = title ? ` title=\"${escape(title)}\"` : "";
-          return `<a href=\"${url}\" target=\"_blank\" rel=\"noopener noreferrer\"${tt}>${t}</a>`;
-        });
+      return (
+        e
+          // bold
+          .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+          // italics
+          .replace(/(^|[^*])\*(?!\s)(.+?)(?!\s)\*(?!\*)/g, "$1<em>$2</em>")
+          .replace(/(^|[^_])_(?!\s)(.+?)(?!\s)_(?!_)/g, "$1<em>$2</em>")
+          // strikethrough
+          .replace(/~~(.+?)~~/g, "<del>$1</del>")
+          // inline code
+          .replace(/`([^`]+?)`/g, "<code>$1</code>")
+          // links
+          .replace(
+            /\[([^\]]+)\]\(([^)\s]+)(?:\s+\"([^\"]*)\")?\)/g,
+            (m, t, url, title) => {
+              const tt = title ? ` title=\"${escape(title)}\"` : "";
+              return `<a href=\"${url}\" target=\"_blank\" rel=\"noopener noreferrer\"${tt}>${t}</a>`;
+            }
+          )
+      );
     };
 
     const closeLists = () => {
@@ -830,7 +882,9 @@ function ChangelogTab() {
         flushParagraph(paraBuf);
         closeLists();
         const level = h[1].length;
-        out.push(`<h${level} class=\"mt-4 mb-2 font-bold\">${inline(h[2])}</h${level}>`);
+        out.push(
+          `<h${level} class=\"mt-4 mb-2 font-bold\">${inline(h[2])}</h${level}>`
+        );
         i++;
         continue;
       }
@@ -839,7 +893,11 @@ function ChangelogTab() {
       if (bq) {
         flushParagraph(paraBuf);
         closeLists();
-        out.push(`<blockquote class=\"border-l-4 pl-3 italic text-gray-600\">${inline(bq[1])}</blockquote>`);
+        out.push(
+          `<blockquote class=\"border-l-4 pl-3 italic text-gray-600\">${inline(
+            bq[1]
+          )}</blockquote>`
+        );
         i++;
         continue;
       }
@@ -848,14 +906,16 @@ function ChangelogTab() {
       const ol = line.match(/^\s*\d+\.\s+(.*)$/);
       if (ul) {
         flushParagraph(paraBuf);
-        if (!ulStack.length) out.push("<ul class=\"list-disc ml-6 my-2\">") && ulStack.push(true);
+        if (!ulStack.length)
+          out.push('<ul class="list-disc ml-6 my-2">') && ulStack.push(true);
         out.push(`<li>${inline(ul[1])}</li>`);
         i++;
         continue;
       }
       if (ol) {
         flushParagraph(paraBuf);
-        if (!olStack.length) out.push("<ol class=\"list-decimal ml-6 my-2\">") && olStack.push(true);
+        if (!olStack.length)
+          out.push('<ol class="list-decimal ml-6 my-2">') && olStack.push(true);
         out.push(`<li>${inline(ol[1])}</li>`);
         i++;
         continue;
@@ -864,7 +924,7 @@ function ChangelogTab() {
       if (/^\s*([-*_]){3,}\s*$/.test(line)) {
         flushParagraph(paraBuf);
         closeLists();
-        out.push("<hr class=\"my-4\"/>");
+        out.push('<hr class="my-4"/>');
         i++;
         continue;
       }

@@ -134,6 +134,27 @@ function TimerWidget({containerEl, hostEl}) {
   const menuRef = useRef(null);
   const menuBtnRef = useRef(null);
 
+  // helpers
+  const setSecondHand = (deg) => {
+    if (secHandRef.current) secHandRef.current.style.transform = `rotate(${deg}deg)`;
+  };
+  const stopTick = () => {
+    if (tickAudioRef.current) {
+      try {
+        tickAudioRef.current.pause();
+        tickAudioRef.current.currentTime = 0;
+      } catch {}
+    }
+  };
+  const playTick = () => {
+    if (!audioMuted && tickAudioRef.current) {
+      try {
+        tickAudioRef.current.currentTime = 0;
+        tickAudioRef.current.play().catch(() => {});
+      } catch {}
+    }
+  };
+
   useEffect(() => {
     chrome.storage.sync.get(
       [
@@ -181,15 +202,9 @@ function TimerWidget({containerEl, hostEl}) {
         intervalRef.current = null;
         setStartTime(null);
         setDisplay("00:00:00");
-        if (secHandRef.current)
-          secHandRef.current.style.transform = "rotate(-180deg)";
+        setSecondHand(-180);
         // stop ticking sound
-        if (tickAudioRef.current) {
-          try {
-            tickAudioRef.current.pause();
-            tickAudioRef.current.currentTime = 0;
-          } catch {}
-        }
+        stopTick();
         if (!audioMuted && audioRef.current) {
           try {
             audioRef.current.currentTime = 0;
@@ -201,15 +216,9 @@ function TimerWidget({containerEl, hostEl}) {
       setDisplay(format(remaining));
       const secondsRemaining = Math.max(0, Math.floor(remaining / 1000));
       const secondDeg = (60 - secondsRemaining) * 6 - 180;
-      if (secHandRef.current)
-        secHandRef.current.style.transform = `rotate(${secondDeg}deg)`;
+      setSecondHand(secondDeg);
       // play ticking sound every second
-      if (!audioMuted && tickAudioRef.current) {
-        try {
-          tickAudioRef.current.currentTime = 0;
-          tickAudioRef.current.play().catch(() => {});
-        } catch {}
-      }
+      playTick();
     };
     intervalRef.current = setInterval(tick, 1000);
     tick();
@@ -256,8 +265,7 @@ function TimerWidget({containerEl, hostEl}) {
       setDuration(d);
       setStartTime(Date.now() + d * 1000);
       setDisplay("00:00:00");
-      if (secHandRef.current)
-        secHandRef.current.style.transform = "rotate(-180deg)";
+      setSecondHand(-180);
     });
   }
 
@@ -278,12 +286,7 @@ function TimerWidget({containerEl, hostEl}) {
     clearInterval(intervalRef.current);
     intervalRef.current = null;
     // stop ticking sound
-    if (tickAudioRef.current) {
-      try {
-        tickAudioRef.current.pause();
-        tickAudioRef.current.currentTime = 0;
-      } catch {}
-    }
+    stopTick();
     if (startTime) {
       const remaining = Math.max(0, startTime - Date.now());
       setPausedMs(remaining);
@@ -294,17 +297,11 @@ function TimerWidget({containerEl, hostEl}) {
   function reset() {
     clearInterval(intervalRef.current);
     intervalRef.current = null;
-    if (tickAudioRef.current) {
-      try {
-        tickAudioRef.current.pause();
-        tickAudioRef.current.currentTime = 0;
-      } catch {}
-    }
+    stopTick();
     setStartTime(null);
     setPausedMs(0);
     setDisplay("00:00:00");
-    if (secHandRef.current)
-      secHandRef.current.style.transform = "rotate(-180deg)";
+    setSecondHand(-180);
   }
   function toggleTheme() {
     const newTheme = theme === "dark" ? "light" : "dark";
