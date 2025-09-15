@@ -223,15 +223,23 @@ function WheelTab() {
     defaultPeople.map((p) => p.name).join("\n")
   );
   const [winner, setWinner] = useState("");
+  const [lastWinner, setLastWinner] = useState(null);
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const [spinning, setSpinning] = useState(false);
   const spinningRef = useRef(false);
+  const lastWinnerRef = useRef(null);
   const angleRef = useRef(0);
   const velRef = useRef(0);
+  const spinEndRef = useRef(0);
+  const spinDurRef = useRef(0);
   const canvasRef = useRef(null);
   const confettiCanvasRef = useRef(null);
   const confettiCtxRef = useRef(null);
   const confettiParticlesRef = useRef([]);
+  const wheelAudioRef = useRef(null);
+  // Post-win animation state
+  const winnerAnimatingRef = useRef(false);
+  const winnerPulseRef = useRef(0); // 0..1 amplitude used by drawWheel for the selected slice
 
   useEffect(() => {
     chrome.storage.sync.get(["peopleWithIds"], (data) => {
@@ -293,10 +301,12 @@ function WheelTab() {
 
     namesList.forEach((name, i) => {
       ctx.beginPath();
+      const isSelected = i === selectedIndex;
+      const r = isSelected ? radius + 12 * Math.max(0, Math.min(1, winnerPulseRef.current)) : radius;
       ctx.moveTo(0, 0);
-      ctx.arc(0, 0, radius, i * step, (i + 1) * step);
+      ctx.arc(0, 0, r, i * step, (i + 1) * step);
       ctx.fillStyle =
-        i === selectedIndex
+        isSelected
           ? `hsl(${(i * 360) / namesList.length}, 90%, 50%)`
           : `hsl(${(i * 360) / namesList.length}, 70%, 70%)`;
       ctx.fill();
@@ -304,7 +314,7 @@ function WheelTab() {
 
       ctx.save();
       ctx.rotate(i * step + step / 2);
-      ctx.translate(radius * 0.8, 0);
+      ctx.translate(r * 0.8, 0);
       ctx.rotate(Math.PI / 2);
       ctx.fillStyle = "#000";
       ctx.font = "bold 14px sans-serif";
@@ -313,6 +323,17 @@ function WheelTab() {
         ctx.fillText(char, -ctx.measureText(char).width / 2, index * 16);
       });
       ctx.restore();
+
+      // Add a soft glow around the winning slice
+      if (isSelected && winnerAnimatingRef.current) {
+        ctx.save();
+        ctx.strokeStyle = "rgba(255, 215, 0, 0.9)"; // gold
+        ctx.lineWidth = 6;
+        ctx.beginPath();
+        ctx.arc(0, 0, r, i * step, (i + 1) * step);
+        ctx.stroke();
+        ctx.restore();
+      }
     });
 
     ctx.restore();
@@ -321,43 +342,90 @@ function WheelTab() {
   function animate() {
     if (!spinningRef.current) return;
     angleRef.current += velRef.current;
-    velRef.current *= 0.98;
-    if (velRef.current < 0.002) {
+    const now = Date.now();
+    if (now >= spinEndRef.current) {
       setSpinning(false);
       spinningRef.current = false;
-      const normalizedAngle =
-        ((angleRef.current % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
-      const step = (2 * Math.PI) / names.length;
-      const pointerAngle =
-        (2 * Math.PI - normalizedAngle + Math.PI / 2) % (2 * Math.PI);
+      const TAU = 2 * Math.PI;
+      const normalizedAngle = ((angleRef.current % TAU) + TAU) % TAU;
+      const step = TAU / names.length;
+      // Pointer at South in canvas coordinates (0 = East)
+      const POINTER = Math.PI / 2;
+      // Angle of pointer expressed in wheel coordinates
+      const pointerAngle = (TAU - normalizedAngle + POINTER) % TAU;
+      // Sector under the pointer (by containment)
       const index = Math.floor(pointerAngle / step) % names.length;
       const selectedPerson = names[index];
       setWinner(`Il vincitore è ${selectedPerson}!`);
       setSelectedIndex(index);
+      // Snap the wheel so the center of the winning sector aligns exactly with the pointer
+      const centerOfIndex = index * step + step / 2; // wheel coords
+      const targetNormalized = (POINTER - centerOfIndex + TAU) % TAU; // canvas coords
+      const delta = ((targetNormalized - normalizedAngle + Math.PI) % TAU) - Math.PI; // shortest delta
+      angleRef.current += delta; // apply snap correction
       startConfetti();
+      try { wheelAudioRef.current?.play?.(); } catch {}
+      setLastWinner(selectedPerson);
+      lastWinnerRef.current = selectedPerson;
 
-      // Remove winner from textarea and storage, preserve jiraId if possible
-      const updatedNames = names.filter((n) => n !== selectedPerson);
-      setTextarea(updatedNames.join("\n"));
-      const updatedPeople = people.filter((p) => p.name !== selectedPerson);
-      setPeople(updatedPeople);
-      chrome.storage.sync.set({peopleWithIds: updatedPeople});
+      // Start a brief winner animation, then remove the winner from the list
+      startWinnerAnimation(selectedPerson);
+      return;
     } else {
+      const rem = Math.max(0, spinEndRef.current - now);
+      const frac = spinDurRef.current > 0 ? rem / spinDurRef.current : 0;
+      velRef.current = 0.35 * Math.max(0.05, frac * frac);
       requestAnimationFrame(animate);
     }
     drawWheel(names);
   }
 
+  function startWinnerAnimation(selectedPerson) {
+    winnerAnimatingRef.current = true;
+    const start = Date.now();
+    const duration = 1800; // ms
+
+    const stepAnim = () => {
+      const t = (Date.now() - start) / duration;
+      if (t >= 1) {
+        winnerPulseRef.current = 0;
+        winnerAnimatingRef.current = false;
+        // After a smooth pause, remove the winner and redraw
+        const updatedNames = names.filter((n) => n !== selectedPerson);
+        setTextarea(updatedNames.join("\n"));
+        const updatedPeople = people.filter((p) => p.name !== selectedPerson);
+        setPeople(updatedPeople);
+        chrome.storage.sync.set({peopleWithIds: updatedPeople});
+        setSelectedIndex(-1);
+        drawWheel(updatedNames);
+        return;
+      }
+      // Pulsating amplitude decays over time
+      const amp = Math.abs(Math.sin(t * 6 * Math.PI)) * (1 - t);
+      winnerPulseRef.current = amp;
+      drawWheel(names);
+      requestAnimationFrame(stepAnim);
+    };
+    requestAnimationFrame(stepAnim);
+  }
+
   function onSpin() {
+    if (winnerAnimatingRef.current) return; // avoid spinning during winner animation
     if (names.length < 2) {
       alert("Inserisci almeno due nomi per usare la ruota.");
       return;
     }
+    // Winner is now removed immediately at the end of the previous spin
+    setLastWinner(null);
+    lastWinnerRef.current = null;
     setSpinning(true);
     spinningRef.current = true;
     setWinner("");
     setSelectedIndex(-1);
-    velRef.current = Math.random() * 0.3 + 0.25;
+    const dur = 3000 + Math.random() * 2000; // 3-5s
+    spinDurRef.current = dur;
+    spinEndRef.current = Date.now() + dur;
+    velRef.current = 0.35;
     requestAnimationFrame(animate);
   }
 
@@ -381,6 +449,8 @@ function WheelTab() {
     velRef.current = 0;
     setSpinning(false);
     spinningRef.current = false;
+    setLastWinner(null);
+    lastWinnerRef.current = null;
   }
 
   function onShuffle() {
@@ -480,9 +550,14 @@ function WheelTab() {
             <button
               id="spin"
               onClick={onSpin}
-              className="flex-1 bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded"
+              disabled={spinning}
+              className={`flex-1 text-white font-semibold py-2 px-4 rounded ${
+                spinning
+                  ? "bg-green-400 cursor-not-allowed"
+                  : "bg-green-600 hover:bg-green-700"
+              }`}
             >
-              Gira
+              {spinning ? "Girando…" : "Gira"}
             </button>
             <button
               id="wheel-save"
@@ -517,6 +592,7 @@ function WheelTab() {
         id="confetti-canvas"
         className="fixed top-0 left-0 w-full h-full pointer-events-none z-50"
       ></canvas>
+      <audio ref={wheelAudioRef} src={chrome.runtime.getURL("assets/sounds/beep.mp3")} preload="auto" />
     </div>
   );
 }
