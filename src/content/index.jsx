@@ -128,6 +128,7 @@ function TimerWidget({containerEl, hostEl}) {
   const secHandRef = useRef(null);
   const intervalRef = useRef(null);
   const audioRef = useRef(null);
+  const tickAudioRef = useRef(null);
   const menuRef = useRef(null);
   const menuBtnRef = useRef(null);
 
@@ -158,6 +159,7 @@ function TimerWidget({containerEl, hostEl}) {
   useEffect(() => {
     if (!startTime) return;
     const tick = () => {
+      tickAudioRef.current.volume = 0.1;
       const remaining = startTime - Date.now();
       if (remaining <= 0) {
         clearInterval(intervalRef.current);
@@ -166,6 +168,13 @@ function TimerWidget({containerEl, hostEl}) {
         setDisplay("00:00:00");
         if (secHandRef.current)
           secHandRef.current.style.transform = "rotate(-180deg)";
+        // stop ticking sound
+        if (tickAudioRef.current) {
+          try {
+            tickAudioRef.current.pause();
+            tickAudioRef.current.currentTime = 0;
+          } catch {}
+        }
         if (audioRef.current) {
           try {
             audioRef.current.currentTime = 0;
@@ -179,6 +188,13 @@ function TimerWidget({containerEl, hostEl}) {
       const secondDeg = (60 - secondsRemaining) * 6 - 180;
       if (secHandRef.current)
         secHandRef.current.style.transform = `rotate(${secondDeg}deg)`;
+      // play ticking sound every second
+      if (tickAudioRef.current) {
+        try {
+          tickAudioRef.current.currentTime = 0;
+          tickAudioRef.current.play().catch(() => {});
+        } catch {}
+      }
     };
     intervalRef.current = setInterval(tick, 1000);
     tick();
@@ -245,6 +261,13 @@ function TimerWidget({containerEl, hostEl}) {
     playBeep();
     clearInterval(intervalRef.current);
     intervalRef.current = null;
+    // stop ticking sound
+    if (tickAudioRef.current) {
+      try {
+        tickAudioRef.current.pause();
+        tickAudioRef.current.currentTime = 0;
+      } catch {}
+    }
     if (startTime) {
       const remaining = Math.max(0, startTime - Date.now());
       setPausedMs(remaining);
@@ -255,6 +278,12 @@ function TimerWidget({containerEl, hostEl}) {
   function reset() {
     clearInterval(intervalRef.current);
     intervalRef.current = null;
+    if (tickAudioRef.current) {
+      try {
+        tickAudioRef.current.pause();
+        tickAudioRef.current.currentTime = 0;
+      } catch {}
+    }
     setStartTime(null);
     setPausedMs(0);
     setDisplay("00:00:00");
@@ -378,6 +407,11 @@ function TimerWidget({containerEl, hostEl}) {
       <audio
         ref={audioRef}
         src={chrome.runtime.getURL("assets/sounds/beep.mp3")}
+        preload="auto"
+      />
+      <audio
+        ref={tickAudioRef}
+        src={chrome.runtime.getURL("assets/sounds/tick.mp3")}
         preload="auto"
       />
     </div>

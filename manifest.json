@@ -32,7 +32,7 @@
       "matches": ["<all_urls>"]
     },
     {
-      "resources": ["assets/sounds/beep.mp3"],
+      "resources": ["assets/sounds/beep.mp3", "assets/sounds/tick.mp3"],
       "matches": ["<all_urls>"]
     },
     {
