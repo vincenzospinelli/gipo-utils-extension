@@ -741,6 +741,149 @@ function WheelTab() {
 
 function ChangelogTab() {
   const [content, setContent] = useState("Caricamento changelog...");
+  const mdToHtml = (md) => {
+    if (!md) return "";
+    // Escape HTML
+    const escape = (s) =>
+      s
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/\"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+
+    // Handle code blocks ``` ``` first
+    let html = "";
+    const lines = md.replace(/\r\n?/g, "\n").split("\n");
+    let i = 0;
+    let inCode = false;
+    let codeLang = "";
+    let codeBuf = [];
+    const out = [];
+    const flushParagraph = (buf) => {
+      const txt = buf.join("\n").trim();
+      if (!txt) return;
+      out.push(`<p>${inline(txt)}</p>`);
+      buf.length = 0;
+    };
+    const ulStack = [];
+    const olStack = [];
+
+    const inline = (text) => {
+      const e = escape(text);
+      return e
+        // bold
+        .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+        // italics
+        .replace(/(^|[^*])\*(?!\s)(.+?)(?!\s)\*(?!\*)/g, "$1<em>$2</em>")
+        .replace(/(^|[^_])_(?!\s)(.+?)(?!\s)_(?!_)/g, "$1<em>$2</em>")
+        // strikethrough
+        .replace(/~~(.+?)~~/g, "<del>$1</del>")
+        // inline code
+        .replace(/`([^`]+?)`/g, "<code>$1</code>")
+        // links
+        .replace(/\[([^\]]+)\]\(([^)\s]+)(?:\s+\"([^\"]*)\")?\)/g, (m, t, url, title) => {
+          const tt = title ? ` title=\"${escape(title)}\"` : "";
+          return `<a href=\"${url}\" target=\"_blank\" rel=\"noopener noreferrer\"${tt}>${t}</a>`;
+        });
+    };
+
+    const closeLists = () => {
+      while (ulStack.length) out.push("</ul>") && ulStack.pop();
+      while (olStack.length) out.push("</ol>") && olStack.pop();
+    };
+
+    let paraBuf = [];
+    while (i < lines.length) {
+      const line = lines[i];
+      // fenced code start/end
+      const fence = line.match(/^```\s*(\w+)?\s*$/);
+      if (fence) {
+        if (inCode) {
+          // close code
+          out.push(
+            `<pre class=\"overflow-auto rounded bg-gray-100 p-3 text-sm\"><code class=\"language-${codeLang}\">${escape(
+              codeBuf.join("\n")
+            )}</code></pre>`
+          );
+          codeBuf = [];
+          codeLang = "";
+          inCode = false;
+        } else {
+          flushParagraph(paraBuf);
+          closeLists();
+          inCode = true;
+          codeLang = fence[1] || "";
+        }
+        i++;
+        continue;
+      }
+      if (inCode) {
+        codeBuf.push(line);
+        i++;
+        continue;
+      }
+
+      // headings
+      const h = line.match(/^(#{1,6})\s+(.*)$/);
+      if (h) {
+        flushParagraph(paraBuf);
+        closeLists();
+        const level = h[1].length;
+        out.push(`<h${level} class=\"mt-4 mb-2 font-bold\">${inline(h[2])}</h${level}>`);
+        i++;
+        continue;
+      }
+      // blockquote
+      const bq = line.match(/^>\s?(.*)$/);
+      if (bq) {
+        flushParagraph(paraBuf);
+        closeLists();
+        out.push(`<blockquote class=\"border-l-4 pl-3 italic text-gray-600\">${inline(bq[1])}</blockquote>`);
+        i++;
+        continue;
+      }
+      // lists
+      const ul = line.match(/^\s*[-*]\s+(.*)$/);
+      const ol = line.match(/^\s*\d+\.\s+(.*)$/);
+      if (ul) {
+        flushParagraph(paraBuf);
+        if (!ulStack.length) out.push("<ul class=\"list-disc ml-6 my-2\">") && ulStack.push(true);
+        out.push(`<li>${inline(ul[1])}</li>`);
+        i++;
+        continue;
+      }
+      if (ol) {
+        flushParagraph(paraBuf);
+        if (!olStack.length) out.push("<ol class=\"list-decimal ml-6 my-2\">") && olStack.push(true);
+        out.push(`<li>${inline(ol[1])}</li>`);
+        i++;
+        continue;
+      }
+      // horizontal rule
+      if (/^\s*([-*_]){3,}\s*$/.test(line)) {
+        flushParagraph(paraBuf);
+        closeLists();
+        out.push("<hr class=\"my-4\"/>");
+        i++;
+        continue;
+      }
+      // blank line => paragraph break
+      if (/^\s*$/.test(line)) {
+        flushParagraph(paraBuf);
+        closeLists();
+        i++;
+        continue;
+      }
+      // accumulate paragraph text
+      paraBuf.push(line);
+      i++;
+    }
+    flushParagraph(paraBuf);
+    closeLists();
+    html = out.join("\n");
+    return html;
+  };
   useEffect(() => {
     fetch(chrome.runtime.getURL("CHANGELOG.md"))
       .then((r) => r.text())
@@ -753,12 +896,11 @@ function ChangelogTab() {
       className="bg-white shadow-lg rounded-lg p-8 max-w-3xl w-full"
     >
       <h2 className="text-2xl font-bold mb-4 text-gray-800">Changelog</h2>
-      <pre
+      <div
         id="changelog-content"
-        className="whitespace-pre-wrap text-sm text-gray-700 max-h-[500px] overflow-auto"
-      >
-        {content}
-      </pre>
+        className="text-sm text-gray-800 leading-6 max-h-[500px] overflow-auto"
+        dangerouslySetInnerHTML={{__html: mdToHtml(content)}}
+      />
     </div>
   );
 }
