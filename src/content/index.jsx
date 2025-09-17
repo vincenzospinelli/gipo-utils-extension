@@ -6,7 +6,12 @@ import {TimerAudio} from "./components/TimerAudio";
 import {TimerControls} from "./components/TimerControls";
 import {TimerMenu} from "./components/TimerMenu";
 import {TimerAnalogClock} from "./components/TimerAnalogClock";
-import {DEFAULT_DURATION, DEFAULT_PEOPLE} from "../shared/constants";
+import {
+  DEFAULT_DURATION,
+  DEFAULT_PEOPLE,
+  DEFAULT_REMINDER_ENABLED,
+  DEFAULT_REMINDER_SECONDS,
+} from "../shared/constants";
 import {applyVolume, ensureUnitVolume} from "../shared/audio";
 import {makeElementDraggable, waitForSelector} from "../shared/dom";
 import {sanitizePeopleList, ensureIndexInBounds} from "../shared/people";
@@ -61,6 +66,9 @@ function TimerWidget({containerEl, hostEl}) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [audioMuted, setAudioMuted] = useState(false);
   const [audioVolume, setAudioVolume] = useState(0.1);
+  const [reminderEnabled, setReminderEnabled] = useState(DEFAULT_REMINDER_ENABLED);
+  const [reminderSeconds, setReminderSeconds] = useState(DEFAULT_REMINDER_SECONDS);
+  const [reminderFlash, setReminderFlash] = useState(false);
 
   const secHandRef = useRef(null);
   const intervalRef = useRef(null);
@@ -68,6 +76,7 @@ function TimerWidget({containerEl, hostEl}) {
   const tickAudioRef = useRef(null);
   const startTimeRef = useRef(startTime);
   const pausedMsRef = useRef(pausedMs);
+  const reminderTriggeredRef = useRef(false);
 
   const setSecondHand = useCallback((deg) => {
     if (secHandRef.current) {
@@ -104,6 +113,26 @@ function TimerWidget({containerEl, hostEl}) {
     } catch {}
   }, [audioMuted]);
 
+  const clearReminderFlash = useCallback(() => {
+    setReminderFlash(false);
+  }, []);
+
+  const triggerReminder = useCallback(() => {
+    reminderTriggeredRef.current = true;
+    setReminderFlash(true);
+    playBeep();
+    try {
+      if (typeof navigator !== "undefined" && navigator.vibrate) {
+        navigator.vibrate(200);
+      }
+    } catch {}
+  }, [playBeep]);
+
+  const resetReminderState = useCallback(() => {
+    reminderTriggeredRef.current = false;
+    clearReminderFlash();
+  }, [clearReminderFlash]);
+
   useEffect(() => {
     let active = true;
     readSyncStorage([
@@ -114,6 +143,8 @@ function TimerWidget({containerEl, hostEl}) {
       "widgetVisible",
       "audioMuted",
       "audioVolume",
+      "reminderEnabled",
+      "reminderSeconds",
     ]).then((data) => {
       if (!active) return;
       const sanitized = sanitizePeopleList(
@@ -133,6 +164,17 @@ function TimerWidget({containerEl, hostEl}) {
       setVisible(data.widgetVisible !== false);
       setAudioMuted(Boolean(data.audioMuted));
       setAudioVolume(ensureUnitVolume(data.audioVolume, 0.1));
+      setReminderEnabled(
+        typeof data.reminderEnabled === "boolean"
+          ? data.reminderEnabled
+          : DEFAULT_REMINDER_ENABLED
+      );
+      const storedReminderSeconds = parseInt(data.reminderSeconds, 10);
+      setReminderSeconds(
+        !Number.isNaN(storedReminderSeconds) && storedReminderSeconds > 0
+          ? storedReminderSeconds
+          : DEFAULT_REMINDER_SECONDS
+      );
     });
     return () => {
       active = false;
@@ -166,6 +208,7 @@ function TimerWidget({containerEl, hostEl}) {
         setSecondHand(HAND_RESET_DEG);
         stopTick();
         playBeep();
+        resetReminderState();
         return;
       }
 
@@ -173,6 +216,15 @@ function TimerWidget({containerEl, hostEl}) {
       const secondsRemaining = Math.max(0, Math.floor(remaining / 1000));
       const secondDeg = (60 - secondsRemaining) * 6 + HAND_RESET_DEG;
       setSecondHand(secondDeg);
+      if (
+        reminderEnabled &&
+        !reminderTriggeredRef.current &&
+        reminderSeconds > 0 &&
+        remaining > 0 &&
+        remaining <= reminderSeconds * 1000
+      ) {
+        triggerReminder();
+      }
       playTick();
     };
 
@@ -182,7 +234,17 @@ function TimerWidget({containerEl, hostEl}) {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
     };
-  }, [startTime, playBeep, playTick, setSecondHand, stopTick]);
+  }, [
+    startTime,
+    playBeep,
+    playTick,
+    setSecondHand,
+    stopTick,
+    reminderEnabled,
+    reminderSeconds,
+    triggerReminder,
+    resetReminderState,
+  ]);
 
   useEffect(() => {
     if (!containerEl) return;
@@ -278,6 +340,19 @@ function TimerWidget({containerEl, hostEl}) {
         setFilterJiraByUser(Boolean(changes.filterJiraByUser.newValue));
       }
 
+      if (changes.reminderEnabled) {
+        const enabled = Boolean(changes.reminderEnabled.newValue);
+        setReminderEnabled(enabled);
+        if (!enabled) resetReminderState();
+      }
+
+      if (changes.reminderSeconds) {
+        const next = parseInt(changes.reminderSeconds.newValue, 10);
+        if (!Number.isNaN(next) && next > 0) {
+          setReminderSeconds(next);
+        }
+      }
+
       if (changes.peopleWithIds) {
         const sanitized = sanitizePeopleList(changes.peopleWithIds.newValue);
         setPeople(sanitized);
@@ -286,7 +361,17 @@ function TimerWidget({containerEl, hostEl}) {
     });
 
     return unsubscribe;
-  }, [setSecondHand]);
+  }, [resetReminderState, setSecondHand]);
+
+  useEffect(() => {
+    if (!reminderEnabled) {
+      resetReminderState();
+    }
+  }, [reminderEnabled, resetReminderState]);
+
+  useEffect(() => () => {
+    resetReminderState();
+  }, [resetReminderState]);
 
   const changePerson = useCallback(
     (delta) => {
@@ -295,11 +380,12 @@ function TimerWidget({containerEl, hostEl}) {
       setIndex(nextIndex);
       if (filterJiraByUser) changeJiraView(people[nextIndex]);
       setPausedMs(0);
+      resetReminderState();
       setStartTime(Date.now() + duration * 1000);
       setDisplay("00:00:00");
       setSecondHand(HAND_RESET_DEG);
     },
-    [people, index, filterJiraByUser, duration, setSecondHand]
+    [people, index, filterJiraByUser, duration, resetReminderState, setSecondHand]
   );
 
   const start = useCallback(() => {
@@ -307,15 +393,28 @@ function TimerWidget({containerEl, hostEl}) {
     if (startTime) return;
     if (filterJiraByUser && people[index]) changeJiraView(people[index]);
     if (pausedMs > 0) {
+      clearReminderFlash();
       setStartTime(Date.now() + pausedMs);
       setPausedMs(0);
       return;
     }
+    resetReminderState();
     setStartTime(Date.now() + duration * 1000);
-  }, [duration, filterJiraByUser, index, pausedMs, people, playBeep, startTime]);
+  }, [
+    clearReminderFlash,
+    duration,
+    filterJiraByUser,
+    index,
+    pausedMs,
+    people,
+    playBeep,
+    resetReminderState,
+    startTime,
+  ]);
 
   const stop = useCallback(() => {
     playBeep();
+    clearReminderFlash();
     clearInterval(intervalRef.current);
     intervalRef.current = null;
     stopTick();
@@ -325,17 +424,18 @@ function TimerWidget({containerEl, hostEl}) {
       setDisplay(formatDuration(remaining));
     }
     setStartTime(null);
-  }, [playBeep, startTime, stopTick]);
+  }, [clearReminderFlash, playBeep, startTime, stopTick]);
 
   const reset = useCallback(() => {
     clearInterval(intervalRef.current);
     intervalRef.current = null;
     stopTick();
+    resetReminderState();
     setStartTime(null);
     setPausedMs(0);
     setDisplay("00:00:00");
     setSecondHand(HAND_RESET_DEG);
-  }, [setSecondHand, stopTick]);
+  }, [resetReminderState, setSecondHand, stopTick]);
 
   const toggleTheme = useCallback(() => {
     const nextTheme = theme === "dark" ? "light" : "dark";
@@ -355,9 +455,15 @@ function TimerWidget({containerEl, hostEl}) {
   if (!visible) return null;
 
   const currentPerson = people[index]?.name || "Nessuno selezionato";
+  const containerClassName = [
+    "flex flex-col items-center gap-4 pt-8 pr-4 pb-4 pl-4 bg-white dark:bg-gray-800 shadow-lg rounded-lg text-gray-800 dark:text-white text-sm relative",
+    reminderFlash ? "ring-4 ring-red-500 animate-pulse" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   return (
-    <div className="flex flex-col items-center gap-4 pt-8 pr-4 pb-4 pl-4 bg-white dark:bg-gray-800 shadow-lg rounded-lg text-gray-800 dark:text-white text-sm relative">
+    <div className={containerClassName}>
       <div className="absolute top-1 left-1 z-10">
         <TimerMenu
           isOpen={menuOpen}

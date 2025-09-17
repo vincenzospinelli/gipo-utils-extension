@@ -1,5 +1,9 @@
 ## [2.1.1] - 2025-09-17
 
+### ✨ Nuove funzionalità
+
+- GipoTimer: promemoria opzionale quando mancano X secondi, con flash della cornice.
+
 ### ♻️ Refactor
 
 - Estratti moduli condivisi per storage, audio, tempo e lista persone così da eliminare duplicazioni tra widget e opzioni.

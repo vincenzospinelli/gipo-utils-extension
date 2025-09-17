@@ -1,6 +1,11 @@
 import {useEffect, useMemo, useRef, useState} from "react";
 
-import {DEFAULT_DURATION, DEFAULT_PEOPLE} from "../shared/constants";
+import {
+  DEFAULT_DURATION,
+  DEFAULT_PEOPLE,
+  DEFAULT_REMINDER_ENABLED,
+  DEFAULT_REMINDER_SECONDS,
+} from "../shared/constants";
 import {ensureUnitVolume, percentToUnit, unitToPercent} from "../shared/audio";
 import {sanitizePeopleList} from "../shared/people";
 import {readSyncStorage, writeSyncStorage} from "../shared/storage";
@@ -87,6 +92,12 @@ function TimerTab() {
   const [filterJiraByUser, setFilterJiraByUser] = useState(false);
   const [soundsEnabled, setSoundsEnabled] = useState(true);
   const [audioVolume, setAudioVolume] = useState(10);
+  const [reminderEnabled, setReminderEnabledState] = useState(
+    DEFAULT_REMINDER_ENABLED
+  );
+  const [reminderSecondsInput, setReminderSecondsInput] = useState(
+    String(DEFAULT_REMINDER_SECONDS)
+  );
 
   useEffect(() => {
     let active = true;
@@ -96,6 +107,8 @@ function TimerTab() {
       "filterJiraByUser",
       "audioMuted",
       "audioVolume",
+      "reminderEnabled",
+      "reminderSeconds",
     ]).then((data) => {
       if (!active) return;
       const storedPeople = Array.isArray(data.peopleWithIds)
@@ -111,11 +124,32 @@ function TimerTab() {
       setFilterJiraByUser(Boolean(data.filterJiraByUser));
       setSoundsEnabled(!Boolean(data.audioMuted));
       setAudioVolume(unitToPercent(ensureUnitVolume(data.audioVolume, 0.1)));
-      if (!data.peopleWithIds || !data.duration) {
-        writeSyncStorage({
-          peopleWithIds: sanitizePeopleList(storedPeople),
-          duration: storedDuration || DEFAULT_DURATION,
-        });
+      const reminderEnabledValue =
+        typeof data.reminderEnabled === "boolean"
+          ? data.reminderEnabled
+          : DEFAULT_REMINDER_ENABLED;
+      setReminderEnabledState(reminderEnabledValue);
+      const parsedReminderSeconds = parseInt(data.reminderSeconds, 10);
+      const safeReminderSeconds =
+        !Number.isNaN(parsedReminderSeconds) && parsedReminderSeconds > 0
+          ? parsedReminderSeconds
+          : DEFAULT_REMINDER_SECONDS;
+      setReminderSecondsInput(String(safeReminderSeconds));
+      const defaultsPayload = {};
+      if (!data.peopleWithIds) {
+        defaultsPayload.peopleWithIds = sanitizePeopleList(storedPeople);
+      }
+      if (!data.duration) {
+        defaultsPayload.duration = storedDuration || DEFAULT_DURATION;
+      }
+      if (typeof data.reminderEnabled !== "boolean") {
+        defaultsPayload.reminderEnabled = DEFAULT_REMINDER_ENABLED;
+      }
+      if (Number.isNaN(parsedReminderSeconds) || parsedReminderSeconds <= 0) {
+        defaultsPayload.reminderSeconds = safeReminderSeconds;
+      }
+      if (Object.keys(defaultsPayload).length > 0) {
+        writeSyncStorage(defaultsPayload);
       }
     });
     return () => {
@@ -184,6 +218,36 @@ function TimerTab() {
       audioVolume: percentToUnit(safeValue),
     });
     showTimerToast();
+  };
+
+  const toggleReminderSetting = (enabled) => {
+    setReminderEnabledState(enabled);
+    if (enabled) {
+      const numeric = parseInt(reminderSecondsInput, 10);
+      const safeNumeric =
+        !Number.isNaN(numeric) && numeric > 0
+          ? numeric
+          : DEFAULT_REMINDER_SECONDS;
+      if (Number.isNaN(numeric) || numeric <= 0) {
+        setReminderSecondsInput(String(safeNumeric));
+      }
+      writeSyncStorage({
+        reminderEnabled: true,
+        reminderSeconds: safeNumeric,
+      });
+    } else {
+      writeSyncStorage({reminderEnabled: false});
+    }
+    showTimerToast();
+  };
+
+  const onReminderSecondsChange = (value) => {
+    setReminderSecondsInput(value);
+    const numeric = parseInt(value, 10);
+    if (!Number.isNaN(numeric) && numeric > 0) {
+      writeSyncStorage({reminderSeconds: numeric});
+      showTimerToast();
+    }
   };
 
   return (
@@ -265,6 +329,39 @@ function TimerTab() {
         >
           Filtra la board Jira per utente (Beta)
         </label>
+      </div>
+
+      <div className="mb-4">
+        <div className="flex items-center gap-2 mb-2">
+          <input
+            type="checkbox"
+            id="timer-reminder-enabled"
+            checked={reminderEnabled}
+            onChange={(e) => toggleReminderSetting(e.target.checked)}
+            className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+          />
+          <label
+            htmlFor="timer-reminder-enabled"
+            className="text-sm font-medium text-gray-700"
+          >
+            Abilita promemoria finale (flash + vibrazione)
+          </label>
+        </div>
+        <label
+          htmlFor="timer-reminder-seconds"
+          className="block text-sm font-medium text-gray-700 mb-1"
+        >
+          Avvisa quando mancano (secondi)
+        </label>
+        <input
+          type="number"
+          id="timer-reminder-seconds"
+          min={1}
+          value={reminderSecondsInput}
+          onChange={(e) => onReminderSecondsChange(e.target.value)}
+          disabled={!reminderEnabled}
+          className="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+        />
       </div>
 
       <div className="mb-4">

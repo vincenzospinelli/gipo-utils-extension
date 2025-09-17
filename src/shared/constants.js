@@ -17,3 +17,6 @@ export const DEFAULT_PEOPLE = [
 ];
 
 export const DEFAULT_DURATION = 60;
+
+export const DEFAULT_REMINDER_SECONDS = 10;
+export const DEFAULT_REMINDER_ENABLED = false;
