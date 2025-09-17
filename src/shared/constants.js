@@ -19,4 +19,7 @@ export const DEFAULT_PEOPLE = [
 export const DEFAULT_DURATION = 60;
 
 export const DEFAULT_REMINDER_SECONDS = 10;
-export const DEFAULT_REMINDER_ENABLED = false;
+export const DEFAULT_REMINDER_ENABLED = true;
+
+export const DEFAULT_TIMER_PRESETS = [300, 600, 900];
+export const MAX_SESSION_HISTORY = 200;

@@ -1,5 +1,5 @@
 import {X as CloseIcon} from "lucide-react";
-import {useCallback, useEffect, useRef, useState} from "react";
+import {useCallback, useEffect, useMemo, useRef, useState} from "react";
 import {createRoot} from "react-dom/client";
 
 import {TimerAudio} from "./components/TimerAudio";
@@ -11,11 +11,19 @@ import {
   DEFAULT_PEOPLE,
   DEFAULT_REMINDER_ENABLED,
   DEFAULT_REMINDER_SECONDS,
+  DEFAULT_TIMER_PRESETS,
+  MAX_SESSION_HISTORY,
 } from "../shared/constants";
 import {applyVolume, ensureUnitVolume} from "../shared/audio";
 import {makeElementDraggable, waitForSelector} from "../shared/dom";
 import {sanitizePeopleList, ensureIndexInBounds} from "../shared/people";
 import {formatDuration} from "../shared/time";
+import {
+  appendSessionHistory,
+  buildSessionEntry,
+  sanitizePresets,
+  summarizeHistory,
+} from "../shared/timer";
 import {
   readSyncStorage,
   subscribeSyncStorage,
@@ -69,6 +77,18 @@ function TimerWidget({containerEl, hostEl}) {
   const [reminderEnabled, setReminderEnabled] = useState(DEFAULT_REMINDER_ENABLED);
   const [reminderSeconds, setReminderSeconds] = useState(DEFAULT_REMINDER_SECONDS);
   const [reminderFlash, setReminderFlash] = useState(false);
+  const [presets, setPresets] = useState(DEFAULT_TIMER_PRESETS);
+  const [selectedPreset, setSelectedPreset] = useState(null);
+  const [sessionHistory, setSessionHistory] = useState([]);
+
+  const totalsByPerson = useMemo(() => {
+    const summary = summarizeHistory(sessionHistory);
+    const map = new Map();
+    summary.forEach(({personName, durationMs}) => {
+      if (personName) map.set(personName, durationMs);
+    });
+    return map;
+  }, [sessionHistory]);
 
   const secHandRef = useRef(null);
   const intervalRef = useRef(null);
@@ -77,6 +97,8 @@ function TimerWidget({containerEl, hostEl}) {
   const startTimeRef = useRef(startTime);
   const pausedMsRef = useRef(pausedMs);
   const reminderTriggeredRef = useRef(false);
+  const sessionStartRef = useRef(null);
+  const sessionAccumulatedRef = useRef(0);
 
   const setSecondHand = useCallback((deg) => {
     if (secHandRef.current) {
@@ -133,6 +155,64 @@ function TimerWidget({containerEl, hostEl}) {
     clearReminderFlash();
   }, [clearReminderFlash]);
 
+  const accumulateSessionProgress = useCallback(() => {
+    if (sessionStartRef.current) {
+      sessionAccumulatedRef.current += Math.max(
+        0,
+        Date.now() - sessionStartRef.current
+      );
+      sessionStartRef.current = null;
+    }
+  }, []);
+
+  const resetSessionTracking = useCallback(() => {
+    sessionStartRef.current = null;
+    sessionAccumulatedRef.current = 0;
+  }, []);
+
+  const finalizeSession = useCallback(
+    (completed) => {
+      accumulateSessionProgress();
+      const totalMs = sessionAccumulatedRef.current;
+      if (totalMs < 1000) {
+        resetSessionTracking();
+        return;
+      }
+      const personName = people[index]?.name || "Nessuno";
+      const entry = buildSessionEntry({
+        personName,
+        durationMs: totalMs,
+        startedAt: Date.now(),
+        completed: Boolean(completed),
+      });
+      setSessionHistory((prev) => {
+        const next = appendSessionHistory(prev, entry, MAX_SESSION_HISTORY);
+        writeSyncStorage({sessionHistory: next});
+        return next;
+      });
+      resetSessionTracking();
+    },
+    [
+      accumulateSessionProgress,
+      index,
+      people,
+      resetSessionTracking,
+      setSessionHistory,
+    ]
+  );
+
+  const handleSelectPreset = useCallback(
+    (seconds) => {
+      if (startTime) return;
+      const normalized = Math.round(seconds);
+      if (!Number.isFinite(normalized) || normalized <= 0) return;
+      setDuration(normalized);
+      setSelectedPreset(normalized);
+      writeSyncStorage({duration: normalized});
+    },
+    [setDuration, setSelectedPreset, startTime]
+  );
+
   useEffect(() => {
     let active = true;
     readSyncStorage([
@@ -145,6 +225,8 @@ function TimerWidget({containerEl, hostEl}) {
       "audioVolume",
       "reminderEnabled",
       "reminderSeconds",
+      "timerPresets",
+      "sessionHistory",
     ]).then((data) => {
       if (!active) return;
       const sanitized = sanitizePeopleList(
@@ -175,6 +257,15 @@ function TimerWidget({containerEl, hostEl}) {
           ? storedReminderSeconds
           : DEFAULT_REMINDER_SECONDS
       );
+      const sanitizedPresets = sanitizePresets(data.timerPresets);
+      setPresets(sanitizedPresets);
+      setSelectedPreset(
+        sanitizedPresets.includes(safeDuration) ? safeDuration : null
+      );
+      const storedHistory = Array.isArray(data.sessionHistory)
+        ? data.sessionHistory.slice(0, MAX_SESSION_HISTORY)
+        : [];
+      setSessionHistory(storedHistory);
     });
     return () => {
       active = false;
@@ -185,6 +276,14 @@ function TimerWidget({containerEl, hostEl}) {
     applyVolume(audioRef.current, audioMuted, audioVolume);
     applyVolume(tickAudioRef.current, audioMuted, audioVolume);
   }, [audioMuted, audioVolume]);
+
+  useEffect(() => {
+    if (presets.includes(duration)) {
+      setSelectedPreset(duration);
+    } else {
+      setSelectedPreset(null);
+    }
+  }, [duration, presets]);
 
   useEffect(() => {
     startTimeRef.current = startTime;
@@ -208,6 +307,7 @@ function TimerWidget({containerEl, hostEl}) {
         setSecondHand(HAND_RESET_DEG);
         stopTick();
         playBeep();
+        finalizeSession(true);
         resetReminderState();
         return;
       }
@@ -353,6 +453,18 @@ function TimerWidget({containerEl, hostEl}) {
         }
       }
 
+      if (changes.timerPresets) {
+        const sanitized = sanitizePresets(changes.timerPresets.newValue);
+        setPresets(sanitized);
+      }
+
+      if (changes.sessionHistory) {
+        const history = Array.isArray(changes.sessionHistory.newValue)
+          ? changes.sessionHistory.newValue.slice(0, MAX_SESSION_HISTORY)
+          : [];
+        setSessionHistory(history);
+      }
+
       if (changes.peopleWithIds) {
         const sanitized = sanitizePeopleList(changes.peopleWithIds.newValue);
         setPeople(sanitized);
@@ -371,21 +483,36 @@ function TimerWidget({containerEl, hostEl}) {
 
   useEffect(() => () => {
     resetReminderState();
-  }, [resetReminderState]);
+    resetSessionTracking();
+  }, [resetReminderState, resetSessionTracking]);
 
   const changePerson = useCallback(
     (delta) => {
       if (!people.length) return;
+      finalizeSession(false);
+      stopTick();
       const nextIndex = (index + delta + people.length) % people.length;
       setIndex(nextIndex);
       if (filterJiraByUser) changeJiraView(people[nextIndex]);
       setPausedMs(0);
       resetReminderState();
+      resetSessionTracking();
+      sessionStartRef.current = Date.now();
       setStartTime(Date.now() + duration * 1000);
       setDisplay("00:00:00");
       setSecondHand(HAND_RESET_DEG);
     },
-    [people, index, filterJiraByUser, duration, resetReminderState, setSecondHand]
+    [
+      finalizeSession,
+      people,
+      index,
+      filterJiraByUser,
+      duration,
+      resetReminderState,
+      resetSessionTracking,
+      setSecondHand,
+      stopTick,
+    ]
   );
 
   const start = useCallback(() => {
@@ -393,15 +520,17 @@ function TimerWidget({containerEl, hostEl}) {
     if (startTime) return;
     if (filterJiraByUser && people[index]) changeJiraView(people[index]);
     if (pausedMs > 0) {
-      clearReminderFlash();
+      resetReminderState();
+      sessionStartRef.current = Date.now();
       setStartTime(Date.now() + pausedMs);
       setPausedMs(0);
       return;
     }
     resetReminderState();
+    resetSessionTracking();
+    sessionStartRef.current = Date.now();
     setStartTime(Date.now() + duration * 1000);
   }, [
-    clearReminderFlash,
     duration,
     filterJiraByUser,
     index,
@@ -409,12 +538,14 @@ function TimerWidget({containerEl, hostEl}) {
     people,
     playBeep,
     resetReminderState,
+    resetSessionTracking,
     startTime,
   ]);
 
   const stop = useCallback(() => {
     playBeep();
-    clearReminderFlash();
+    resetReminderState();
+    accumulateSessionProgress();
     clearInterval(intervalRef.current);
     intervalRef.current = null;
     stopTick();
@@ -424,18 +555,26 @@ function TimerWidget({containerEl, hostEl}) {
       setDisplay(formatDuration(remaining));
     }
     setStartTime(null);
-  }, [clearReminderFlash, playBeep, startTime, stopTick]);
+  }, [accumulateSessionProgress, playBeep, resetReminderState, startTime, stopTick]);
 
   const reset = useCallback(() => {
     clearInterval(intervalRef.current);
     intervalRef.current = null;
     stopTick();
+    finalizeSession(false);
     resetReminderState();
+    resetSessionTracking();
     setStartTime(null);
     setPausedMs(0);
     setDisplay("00:00:00");
     setSecondHand(HAND_RESET_DEG);
-  }, [resetReminderState, setSecondHand, stopTick]);
+  }, [
+    finalizeSession,
+    resetReminderState,
+    resetSessionTracking,
+    setSecondHand,
+    stopTick,
+  ]);
 
   const toggleTheme = useCallback(() => {
     const nextTheme = theme === "dark" ? "light" : "dark";
@@ -454,7 +593,17 @@ function TimerWidget({containerEl, hostEl}) {
 
   if (!visible) return null;
 
-  const currentPerson = people[index]?.name || "Nessuno selezionato";
+  const currentPersonName = people[index]?.name || "";
+  const currentPerson = currentPersonName || "Nessuno selezionato";
+  const currentPersonTotal = totalsByPerson.get(currentPersonName) || 0;
+  const isRunning = Boolean(startTime);
+  const formatPresetLabel = (seconds) => {
+    if (!Number.isFinite(seconds)) return "?";
+    if (seconds % 60 === 0) {
+      return `${seconds / 60} min`;
+    }
+    return formatDuration(seconds * 1000);
+  };
   const containerClassName = [
     "flex flex-col items-center gap-4 pt-8 pr-4 pb-4 pl-4 bg-white dark:bg-gray-800 shadow-lg rounded-lg text-gray-800 dark:text-white text-sm relative",
     reminderFlash ? "ring-4 ring-red-500 animate-pulse" : "",
@@ -482,8 +631,28 @@ function TimerWidget({containerEl, hostEl}) {
       <div id="current-person" className="font-semibold text-center text-xl">
         {currentPerson}
       </div>
+      {currentPersonName && currentPersonTotal > 0 && (
+        <div className="text-xs text-gray-500">
+          Totale parlato: {formatDuration(currentPersonTotal)}
+        </div>
+      )}
       <div id="gipo-timer-display" className="text-2xl font-mono">
         {display}
+      </div>
+      <div className="flex gap-2 flex-wrap justify-center items-center">
+        {presets.map((preset) => (
+          <button
+            key={preset}
+            type="button"
+            className={`gipo-button ${selectedPreset === preset ? "ring-2 ring-blue-500" : ""}`}
+            disabled={isRunning}
+            onClick={() => handleSelectPreset(preset)}
+            aria-pressed={selectedPreset === preset}
+            title={`Imposta ${formatPresetLabel(preset)}`}
+          >
+            {formatPresetLabel(preset)}
+          </button>
+        ))}
       </div>
       <TimerControls
         onPrev={() => changePerson(-1)}
