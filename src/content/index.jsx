@@ -1,123 +1,57 @@
-import {
-  X as CloseIcon,
-  Menu as MenuIcon,
-  Moon,
-  Pause as PauseIcon,
-  Play as PlayIcon,
-  Settings,
-  SkipBack,
-  SkipForward,
-  Square,
-  Sun,
-} from "lucide-react";
-import {useEffect, useRef, useState} from "react";
+import {X as CloseIcon} from "lucide-react";
+import {useCallback, useEffect, useRef, useState} from "react";
 import {createRoot} from "react-dom/client";
 
-function makeDraggable(element) {
-  let isDragging = false;
-  let offsetX = 0;
-  let offsetY = 0;
-  element.style.cursor = "move";
-  element.addEventListener("mousedown", (e) => {
-    isDragging = true;
-    const rect = element.getBoundingClientRect();
-    offsetX = e.clientX - rect.left;
-    offsetY = e.clientY - rect.top;
-    element.style.userSelect = "none";
-  });
-  document.addEventListener("mousemove", (e) => {
-    if (!isDragging) return;
-    element.style.left = `${e.clientX - offsetX}px`;
-    element.style.top = `${e.clientY - offsetY}px`;
-    element.style.right = "auto";
-    element.style.bottom = "auto";
-  });
-  document.addEventListener("mouseup", () => {
-    isDragging = false;
-    element.style.userSelect = "auto";
-    // Persist position on mouse up
-    try {
-      const left = element.style.left;
-      const top = element.style.top;
-      if (left && top) {
-        chrome.storage.sync.set({widgetPosition: {left, top}});
-      }
-    } catch {}
-  });
-}
+import {TimerAudio} from "./components/TimerAudio";
+import {TimerControls} from "./components/TimerControls";
+import {TimerMenu} from "./components/TimerMenu";
+import {TimerAnalogClock} from "./components/TimerAnalogClock";
+import {DEFAULT_DURATION, DEFAULT_PEOPLE} from "../shared/constants";
+import {applyVolume, ensureUnitVolume} from "../shared/audio";
+import {makeElementDraggable, waitForSelector} from "../shared/dom";
+import {sanitizePeopleList, ensureIndexInBounds} from "../shared/people";
+import {formatDuration} from "../shared/time";
+import {
+  readSyncStorage,
+  subscribeSyncStorage,
+  writeSyncStorage,
+} from "../shared/storage";
 
-function waitForSelector(selector, timeout = 2000) {
-  return new Promise((resolve, reject) => {
-    const start = performance.now();
-    const interval = setInterval(() => {
-      const el = document.querySelector(selector);
-      if (el && el.offsetParent !== null) {
-        clearInterval(interval);
-        resolve(el);
-      } else if (performance.now() - start > timeout) {
-        clearInterval(interval);
-        reject();
-      }
-    }, 100);
-  });
-}
+const HAND_RESET_DEG = -180;
 
 function changeJiraView(person) {
   if (!person?.jiraId) return;
-  const jiraId = person.jiraId;
+  const {jiraId} = person;
   const labelSelector = `label[for="assignee-${jiraId}"]`;
   const popoverBtnSelector = `button[id="${jiraId}"][role="menuitemcheckbox"]`;
+
   document
     .querySelectorAll('[aria-checked="true"]')
     .forEach((el) => el.click());
+
   const showMoreBtn = document.querySelector(
     '[data-testid="filters.ui.filters.assignee.stateless.show-more-button.assignee-filter-show-more"]'
   );
   if (showMoreBtn) showMoreBtn.click();
-  const el =
+
+  const candidate =
     document.querySelector(labelSelector) ||
     document.querySelector(popoverBtnSelector);
-  if (el && el.offsetParent !== null) {
-    el.dispatchEvent(new MouseEvent("click", {bubbles: true}));
+
+  if (candidate && candidate.offsetParent !== null) {
+    candidate.dispatchEvent(new MouseEvent("click", {bubbles: true}));
     return;
   }
-  waitForSelector(popoverBtnSelector, 2000)
+
+  waitForSelector(popoverBtnSelector, {timeout: 2000})
     .then((el) => el.dispatchEvent(new MouseEvent("click", {bubbles: true})))
-    .catch(() =>
-      console.warn("Assignee non trovato nemmeno dopo retry:", jiraId)
-    );
-}
-
-const defaultPeople = [
-  {name: "Alessandro M", jiraId: ""},
-  {name: "Claudio B", jiraId: ""},
-  {name: "Diego M", jiraId: ""},
-  {name: "Elisa C", jiraId: ""},
-  {name: "Enrico S", jiraId: ""},
-  {name: "Fede D", jiraId: ""},
-  {name: "Fede G", jiraId: ""},
-  {name: "Francesco A", jiraId: ""},
-  {name: "Gabriele R", jiraId: ""},
-  {name: "Luca M", jiraId: ""},
-  {name: "Matteo T", jiraId: ""},
-  {name: "Nicola L", jiraId: ""},
-  {name: "Roberto M", jiraId: ""},
-  {name: "Stefano S", jiraId: ""},
-  {name: "Vincenzo S", jiraId: ""},
-];
-
-function format(ms) {
-  const sec = Math.floor(ms / 1000);
-  const h = String(Math.floor(sec / 3600)).padStart(2, "0");
-  const m = String(Math.floor((sec % 3600) / 60)).padStart(2, "0");
-  const s = String(sec % 60).padStart(2, "0");
-  return `${h}:${m}:${s}`;
+    .catch(() => console.warn("Assignee non trovato nemmeno dopo retry:", jiraId));
 }
 
 function TimerWidget({containerEl, hostEl}) {
-  const [people, setPeople] = useState(defaultPeople);
+  const [people, setPeople] = useState(DEFAULT_PEOPLE);
   const [index, setIndex] = useState(0);
-  const [duration, setDuration] = useState(60);
+  const [duration, setDuration] = useState(DEFAULT_DURATION);
   const [startTime, setStartTime] = useState(null);
   const [pausedMs, setPausedMs] = useState(0);
   const [filterJiraByUser, setFilterJiraByUser] = useState(false);
@@ -127,103 +61,128 @@ function TimerWidget({containerEl, hostEl}) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [audioMuted, setAudioMuted] = useState(false);
   const [audioVolume, setAudioVolume] = useState(0.1);
+
   const secHandRef = useRef(null);
   const intervalRef = useRef(null);
   const audioRef = useRef(null);
   const tickAudioRef = useRef(null);
-  const menuRef = useRef(null);
-  const menuBtnRef = useRef(null);
+  const startTimeRef = useRef(startTime);
+  const pausedMsRef = useRef(pausedMs);
 
-  // helpers
-  const setSecondHand = (deg) => {
-    if (secHandRef.current) secHandRef.current.style.transform = `rotate(${deg}deg)`;
-  };
-  const stopTick = () => {
-    if (tickAudioRef.current) {
-      try {
-        tickAudioRef.current.pause();
-        tickAudioRef.current.currentTime = 0;
-      } catch {}
+  const setSecondHand = useCallback((deg) => {
+    if (secHandRef.current) {
+      secHandRef.current.style.transform = `rotate(${deg}deg)`;
     }
-  };
-  const playTick = () => {
-    if (!audioMuted && tickAudioRef.current) {
-      try {
-        tickAudioRef.current.currentTime = 0;
-        tickAudioRef.current.play().catch(() => {});
-      } catch {}
-    }
-  };
-
-  useEffect(() => {
-    chrome.storage.sync.get(
-      [
-        "peopleWithIds",
-        "duration",
-        "filterJiraByUser",
-        "theme",
-        "widgetVisible",
-        "audioMuted",
-        "audioVolume",
-      ],
-      (data) => {
-        const p = data.peopleWithIds || defaultPeople;
-        setPeople(
-          p
-            .filter((x) => x && x.name)
-            .map((x) => ({name: x.name, jiraId: x.jiraId}))
-        );
-        setDuration(parseInt(data.duration, 10) || 60);
-        setFilterJiraByUser(Boolean(data.filterJiraByUser));
-        setTheme(data.theme || "dark");
-        setVisible(data.widgetVisible !== false);
-        setAudioMuted(Boolean(data.audioMuted));
-        setAudioVolume(
-          typeof data.audioVolume === "number"
-            ? Math.max(0, Math.min(1, data.audioVolume))
-            : 0.1
-        );
-      }
-    );
   }, []);
 
-  // keep audio elements in sync with settings
+  const stopTick = useCallback(() => {
+    const tickEl = tickAudioRef.current;
+    if (!tickEl) return;
+    try {
+      tickEl.pause();
+      tickEl.currentTime = 0;
+    } catch {}
+  }, []);
+
+  const playTick = useCallback(() => {
+    if (audioMuted) return;
+    const tickEl = tickAudioRef.current;
+    if (!tickEl) return;
+    try {
+      tickEl.currentTime = 0;
+      tickEl.play().catch(() => {});
+    } catch {}
+  }, [audioMuted]);
+
+  const playBeep = useCallback(() => {
+    if (audioMuted) return;
+    const beepEl = audioRef.current;
+    if (!beepEl) return;
+    try {
+      beepEl.currentTime = 0;
+      beepEl.play().catch(() => {});
+    } catch {}
+  }, [audioMuted]);
+
   useEffect(() => {
-    if (audioRef.current) audioRef.current.volume = audioMuted ? 0 : audioVolume;
-    if (tickAudioRef.current) tickAudioRef.current.volume = audioMuted ? 0 : audioVolume;
+    let active = true;
+    readSyncStorage([
+      "peopleWithIds",
+      "duration",
+      "filterJiraByUser",
+      "theme",
+      "widgetVisible",
+      "audioMuted",
+      "audioVolume",
+    ]).then((data) => {
+      if (!active) return;
+      const sanitized = sanitizePeopleList(
+        data.peopleWithIds || DEFAULT_PEOPLE
+      );
+      setPeople(sanitized.length ? sanitized : DEFAULT_PEOPLE);
+
+      const storedDuration = parseInt(data.duration, 10);
+      const safeDuration =
+        !Number.isNaN(storedDuration) && storedDuration > 0
+          ? storedDuration
+          : DEFAULT_DURATION;
+      setDuration(safeDuration);
+
+      setFilterJiraByUser(Boolean(data.filterJiraByUser));
+      setTheme(data.theme === "light" ? "light" : "dark");
+      setVisible(data.widgetVisible !== false);
+      setAudioMuted(Boolean(data.audioMuted));
+      setAudioVolume(ensureUnitVolume(data.audioVolume, 0.1));
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    applyVolume(audioRef.current, audioMuted, audioVolume);
+    applyVolume(tickAudioRef.current, audioMuted, audioVolume);
   }, [audioMuted, audioVolume]);
 
   useEffect(() => {
-    if (!startTime) return;
+    startTimeRef.current = startTime;
+  }, [startTime]);
+
+  useEffect(() => {
+    pausedMsRef.current = pausedMs;
+  }, [pausedMs]);
+
+  useEffect(() => {
+    if (!startTime) return undefined;
+
     const tick = () => {
       const remaining = startTime - Date.now();
       if (remaining <= 0) {
         clearInterval(intervalRef.current);
         intervalRef.current = null;
         setStartTime(null);
+        setPausedMs(0);
         setDisplay("00:00:00");
-        setSecondHand(-180);
-        // stop ticking sound
+        setSecondHand(HAND_RESET_DEG);
         stopTick();
-        if (!audioMuted && audioRef.current) {
-          try {
-            audioRef.current.currentTime = 0;
-            audioRef.current.play().catch(() => {});
-          } catch {}
-        }
+        playBeep();
         return;
       }
-      setDisplay(format(remaining));
+
+      setDisplay(formatDuration(remaining));
       const secondsRemaining = Math.max(0, Math.floor(remaining / 1000));
-      const secondDeg = (60 - secondsRemaining) * 6 - 180;
+      const secondDeg = (60 - secondsRemaining) * 6 + HAND_RESET_DEG;
       setSecondHand(secondDeg);
-      // play ticking sound every second
       playTick();
     };
+
     intervalRef.current = setInterval(tick, 1000);
     tick();
-    return () => clearInterval(intervalRef.current);
-  }, [startTime]);
+    return () => {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    };
+  }, [startTime, playBeep, playTick, setSecondHand, stopTick]);
 
   useEffect(() => {
     if (!containerEl) return;
@@ -231,292 +190,213 @@ function TimerWidget({containerEl, hostEl}) {
     containerEl.classList.add(theme);
   }, [theme, containerEl]);
 
-  // Close menu on outside click (also outside widget)
   useEffect(() => {
-    const onDocMouseDown = (e) => {
-      // If click happens outside hostEl, close menu
-      if (hostEl && !hostEl.contains(e.target)) {
+    const onDocMouseDown = (event) => {
+      if (hostEl && !hostEl.contains(event.target)) {
         setMenuOpen(false);
-        return;
       }
     };
     document.addEventListener("mousedown", onDocMouseDown, true);
-    return () =>
+    return () => {
       document.removeEventListener("mousedown", onDocMouseDown, true);
+    };
   }, [hostEl]);
 
-  function playBeep() {
-    if (audioMuted) return;
-    if (audioRef.current) {
-      try {
-        audioRef.current.currentTime = 0;
-        audioRef.current.play().catch(() => {});
-      } catch {}
-    }
-  }
-
-  function changePerson(delta) {
-    if (people.length === 0) return;
-    const next = (index + delta + people.length) % people.length;
-    setIndex(next);
-    if (filterJiraByUser) changeJiraView(people[next]);
-    chrome.storage.sync.get("duration", (data) => {
-      const d = parseInt(data.duration, 10) || duration;
-      setDuration(d);
-      setStartTime(Date.now() + d * 1000);
-      setDisplay("00:00:00");
-      setSecondHand(-180);
-    });
-  }
-
-  function start() {
-    playBeep();
-    if (!startTime) {
-      if (filterJiraByUser && people[index]) changeJiraView(people[index]);
-      if (pausedMs > 0) {
-        setStartTime(Date.now() + pausedMs);
-        setPausedMs(0);
-      } else {
-        setStartTime(Date.now() + duration * 1000);
+  useEffect(() => {
+    const messageHandler = (message) => {
+      if (message?.action === "show-widget") {
+        setVisible(true);
+        writeSyncStorage({widgetVisible: true});
       }
+    };
+    chrome.runtime.onMessage.addListener(messageHandler);
+    return () => chrome.runtime.onMessage.removeListener(messageHandler);
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = subscribeSyncStorage((changes, areaName) => {
+      if (areaName !== "sync") return;
+
+      if (changes.audioMuted) {
+        setAudioMuted(Boolean(changes.audioMuted.newValue));
+      }
+
+      if (changes.audioVolume) {
+        setAudioVolume(ensureUnitVolume(changes.audioVolume.newValue, 0.1));
+      }
+
+      if (changes.duration) {
+        const newSeconds = parseInt(changes.duration.newValue, 10);
+        const oldSeconds = parseInt(changes.duration.oldValue, 10);
+        if (Number.isNaN(newSeconds) || newSeconds <= 0) return;
+
+        setDuration(newSeconds);
+        const now = Date.now();
+        const currentStart = startTimeRef.current;
+        const currentPaused = pausedMsRef.current;
+        const oldMs =
+          !Number.isNaN(oldSeconds) && oldSeconds > 0 ? oldSeconds * 1000 : null;
+
+        if (currentStart) {
+          const remaining = Math.max(0, currentStart - now);
+          let newRemaining = remaining;
+          if (oldMs && oldMs > 0) {
+            const fraction = Math.max(0, Math.min(1, remaining / oldMs));
+            newRemaining = Math.round(fraction * newSeconds * 1000);
+          } else {
+            newRemaining = Math.round(newSeconds * 1000);
+          }
+          setStartTime(now + newRemaining);
+          setDisplay(formatDuration(newRemaining));
+          const secondsRemaining = Math.max(0, Math.floor(newRemaining / 1000));
+          const secondDeg = (60 - secondsRemaining) * 6 + HAND_RESET_DEG;
+          setSecondHand(secondDeg);
+        } else if (currentPaused > 0) {
+          if (oldMs && oldMs > 0) {
+            const fraction = Math.max(0, Math.min(1, currentPaused / oldMs));
+            const newPaused = Math.round(fraction * newSeconds * 1000);
+            setPausedMs(newPaused);
+            setDisplay(formatDuration(newPaused));
+          } else {
+            const newPaused = Math.round(newSeconds * 1000);
+            setPausedMs(newPaused);
+            setDisplay(formatDuration(newPaused));
+          }
+        }
+      }
+
+      if (changes.theme) {
+        const value = changes.theme.newValue;
+        if (value === "light" || value === "dark") setTheme(value);
+      }
+
+      if (changes.widgetVisible) {
+        setVisible(changes.widgetVisible.newValue !== false);
+      }
+
+      if (changes.filterJiraByUser) {
+        setFilterJiraByUser(Boolean(changes.filterJiraByUser.newValue));
+      }
+
+      if (changes.peopleWithIds) {
+        const sanitized = sanitizePeopleList(changes.peopleWithIds.newValue);
+        setPeople(sanitized);
+        setIndex((prev) => ensureIndexInBounds(prev, sanitized));
+      }
+    });
+
+    return unsubscribe;
+  }, [setSecondHand]);
+
+  const changePerson = useCallback(
+    (delta) => {
+      if (!people.length) return;
+      const nextIndex = (index + delta + people.length) % people.length;
+      setIndex(nextIndex);
+      if (filterJiraByUser) changeJiraView(people[nextIndex]);
+      setPausedMs(0);
+      setStartTime(Date.now() + duration * 1000);
+      setDisplay("00:00:00");
+      setSecondHand(HAND_RESET_DEG);
+    },
+    [people, index, filterJiraByUser, duration, setSecondHand]
+  );
+
+  const start = useCallback(() => {
+    playBeep();
+    if (startTime) return;
+    if (filterJiraByUser && people[index]) changeJiraView(people[index]);
+    if (pausedMs > 0) {
+      setStartTime(Date.now() + pausedMs);
+      setPausedMs(0);
+      return;
     }
-  }
-  function stop() {
+    setStartTime(Date.now() + duration * 1000);
+  }, [duration, filterJiraByUser, index, pausedMs, people, playBeep, startTime]);
+
+  const stop = useCallback(() => {
     playBeep();
     clearInterval(intervalRef.current);
     intervalRef.current = null;
-    // stop ticking sound
     stopTick();
     if (startTime) {
       const remaining = Math.max(0, startTime - Date.now());
       setPausedMs(remaining);
-      setDisplay(format(remaining));
+      setDisplay(formatDuration(remaining));
     }
     setStartTime(null);
-  }
-  function reset() {
+  }, [playBeep, startTime, stopTick]);
+
+  const reset = useCallback(() => {
     clearInterval(intervalRef.current);
     intervalRef.current = null;
     stopTick();
     setStartTime(null);
     setPausedMs(0);
     setDisplay("00:00:00");
-    setSecondHand(-180);
-  }
-  function toggleTheme() {
-    const newTheme = theme === "dark" ? "light" : "dark";
-    setTheme(newTheme);
-    chrome.storage.sync.set({theme: newTheme});
-  }
-  function openSettings() {
-    chrome.runtime.sendMessage({action: "open-options"});
-  }
-  function hideWidget() {
-    setVisible(false);
-    chrome.storage.sync.set({widgetVisible: false});
-  }
+    setSecondHand(HAND_RESET_DEG);
+  }, [setSecondHand, stopTick]);
 
-  useEffect(() => {
-    const handler = (message) => {
-      if (message?.action === "show-widget") {
-        setVisible(true);
-        chrome.storage.sync.set({widgetVisible: true});
-      }
-    };
-    chrome.runtime.onMessage.addListener(handler);
-    return () => chrome.runtime.onMessage.removeListener(handler);
+  const toggleTheme = useCallback(() => {
+    const nextTheme = theme === "dark" ? "light" : "dark";
+    setTheme(nextTheme);
+    writeSyncStorage({theme: nextTheme});
+  }, [theme]);
+
+  const openSettings = useCallback(() => {
+    chrome.runtime.sendMessage({action: "open-options"});
   }, []);
 
-  // React to option changes (live sync for audio, duration, theme, visibility, people, filters)
-  useEffect(() => {
-    const onStorageChanged = (changes, areaName) => {
-      if (areaName !== "sync") return;
-      if (changes.audioMuted) {
-        setAudioMuted(Boolean(changes.audioMuted.newValue));
-      }
-      if (changes.audioVolume) {
-        const v = changes.audioVolume.newValue;
-        setAudioVolume(
-          typeof v === "number" ? Math.max(0, Math.min(1, v)) : 0.1
-        );
-      }
-      if (changes.duration) {
-        const newD = parseInt(changes.duration.newValue, 10);
-        const oldD = parseInt(changes.duration.oldValue, 10);
-        if (!Number.isNaN(newD) && newD > 0) {
-          setDuration(newD);
-          const now = Date.now();
-          const oldMs = !Number.isNaN(oldD) && oldD > 0 ? oldD * 1000 : null;
-          if (startTime) {
-            // Active countdown: keep the same completion fraction
-            const remaining = Math.max(0, startTime - now);
-            let newRemaining = remaining;
-            if (oldMs && oldMs > 0) {
-              const frac = Math.max(0, Math.min(1, remaining / oldMs));
-              newRemaining = Math.round(frac * newD * 1000);
-            } else {
-              newRemaining = Math.round(newD * 1000);
-            }
-            setStartTime(now + newRemaining);
-            setDisplay(format(newRemaining));
-            // update second hand immediately
-            const secondsRemaining = Math.max(0, Math.floor(newRemaining / 1000));
-            const secondDeg = (60 - secondsRemaining) * 6 - 180;
-            if (secHandRef.current)
-              secHandRef.current.style.transform = `rotate(${secondDeg}deg)`;
-          } else if (pausedMs > 0) {
-            // Paused: rescale the paused remaining time
-            if (oldMs && oldMs > 0) {
-              const frac = Math.max(0, Math.min(1, pausedMs / oldMs));
-              const newPaused = Math.round(frac * newD * 1000);
-              setPausedMs(newPaused);
-              setDisplay(format(newPaused));
-            } else {
-              const newPaused = Math.round(newD * 1000);
-              setPausedMs(newPaused);
-              setDisplay(format(newPaused));
-            }
-          }
-        }
-      }
-      if (changes.theme) {
-        const t = changes.theme.newValue;
-        if (t === "light" || t === "dark") setTheme(t);
-      }
-      if (changes.widgetVisible) {
-        setVisible(changes.widgetVisible.newValue !== false);
-      }
-      if (changes.filterJiraByUser) {
-        setFilterJiraByUser(Boolean(changes.filterJiraByUser.newValue));
-      }
-      if (changes.peopleWithIds) {
-        const p = Array.isArray(changes.peopleWithIds.newValue)
-          ? changes.peopleWithIds.newValue
-          : defaultPeople;
-        const cleaned = p
-          .filter((x) => x && x.name)
-          .map((x) => ({name: x.name, jiraId: x.jiraId}));
-        setPeople(cleaned);
-        // ensure current index is within bounds
-        setIndex((idx) => (cleaned.length ? Math.min(idx, cleaned.length - 1) : 0));
-      }
-    };
-    try {
-      chrome.storage.onChanged.addListener(onStorageChanged);
-      return () => chrome.storage.onChanged.removeListener(onStorageChanged);
-    } catch {
-      return () => {};
-    }
+  const hideWidget = useCallback(() => {
+    setVisible(false);
+    writeSyncStorage({widgetVisible: false});
   }, []);
 
   if (!visible) return null;
 
-  const current = people[index]?.name || "Nessuno selezionato";
+  const currentPerson = people[index]?.name || "Nessuno selezionato";
 
   return (
     <div className="flex flex-col items-center gap-4 pt-8 pr-4 pb-4 pl-4 bg-white dark:bg-gray-800 shadow-lg rounded-lg text-gray-800 dark:text-white text-sm relative">
       <div className="absolute top-1 left-1 z-10">
-        <div className="relative inline-block text-left min-w-max">
-          <button
-            className="gipo-button"
-            ref={menuBtnRef}
-            onClick={() => setMenuOpen((v) => !v)}
-          >
-            <MenuIcon size={16} />
-          </button>
-          {menuOpen && (
-            <div
-              id="menu-content"
-              ref={menuRef}
-              className="absolute flex flex-col gap-2 left-0 mt-2 w-full bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded shadow-md z-20"
-            >
-              <button
-                className="flex w-full h-8 items-center justify-center gap-2 text-gray-700 dark:text-white hover:bg-gray-100 dark:hover:bg-gray-600 whitespace-nowrap"
-                onClick={toggleTheme}
-              >
-                {theme === "dark" ? (
-                  <Moon size={18} style={{color: "inherit"}} />
-                ) : (
-                  <Sun size={18} s style={{color: "inherit"}} />
-                )}
-              </button>
-              <button
-                className="flex w-full h-8 items-center justify-center gap-2 text-gray-700 dark:text-white hover:bg-gray-100 dark:hover:bg-gray-600 whitespace-nowrap"
-                onClick={openSettings}
-              >
-                <Settings size={18} style={{color: "inherit"}} />
-              </button>
-            </div>
-          )}
-        </div>
+        <TimerMenu
+          isOpen={menuOpen}
+          onToggle={() => setMenuOpen((value) => !value)}
+          theme={theme}
+          onToggleTheme={toggleTheme}
+          onOpenSettings={openSettings}
+        />
       </div>
       <div className="absolute top-1 right-1 z-10">
-        <button
-          className="gipo-button"
-          onClick={hideWidget}
-          aria-label="Chiudi"
-        >
+        <button className="gipo-button" onClick={hideWidget} aria-label="Chiudi">
           <CloseIcon size={14} />
         </button>
       </div>
-      <div className="w-24 h-24 rounded-full border-4 border-black dark:border-white relative">
-        <div className="absolute w-2 h-2 bg-black dark:bg-white rounded-full top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10"></div>
-        <div
-          ref={secHandRef}
-          id="second-hand"
-          className="absolute left-1/2 top-1/2 w-0.5 h-12 bg-red-500 origin-top -translate-x-1/2 -translate-y-1/2 z-0"
-          style={{transform: "rotate(-180deg)"}}
-        ></div>
-      </div>
+      <TimerAnalogClock secondHandRef={secHandRef} />
       <div id="current-person" className="font-semibold text-center text-xl">
-        {current}
+        {currentPerson}
       </div>
       <div id="gipo-timer-display" className="text-2xl font-mono">
         {display}
       </div>
-      <div className="flex gap-2 flex-wrap justify-center items-center">
-        <button
-          className="gipo-button"
-          onClick={() => changePerson(-1)}
-          aria-label="Precedente"
-        >
-          <SkipBack size={16} />
-        </button>
-        <button className="gipo-button" onClick={start} aria-label="Play">
-          <PlayIcon size={16} />
-        </button>
-        <button className="gipo-button" onClick={stop} aria-label="Pausa">
-          <PauseIcon size={16} />
-        </button>
-        <button className="gipo-button" onClick={reset} aria-label="Reset">
-          <Square size={16} />
-        </button>
-        <button
-          className="gipo-button"
-          onClick={() => changePerson(1)}
-          aria-label="Successivo"
-        >
-          <SkipForward size={16} />
-        </button>
-      </div>
-      <audio
-        ref={audioRef}
-        src={chrome.runtime.getURL("assets/sounds/beep.mp3")}
-        preload="auto"
+      <TimerControls
+        onPrev={() => changePerson(-1)}
+        onStart={start}
+        onPause={stop}
+        onReset={reset}
+        onNext={() => changePerson(1)}
       />
-      <audio
-        ref={tickAudioRef}
-        src={chrome.runtime.getURL("assets/sounds/tick.mp3")}
-        preload="auto"
-      />
+      <TimerAudio beepRef={audioRef} tickRef={tickAudioRef} />
     </div>
   );
 }
 
 function mountApp() {
   if (document.getElementById("gipo-timer-widget")) return;
+
   const doMount = async () => {
     if (document.getElementById("gipo-timer-widget")) return;
+
     const host = document.createElement("div");
     host.id = "gipo-timer-widget";
     host.style.position = "fixed";
@@ -524,32 +404,30 @@ function mountApp() {
     host.style.outline = "none";
     host.style.border = "none";
     host.style.boxShadow = "none";
-    // Restore last saved position if present
-    try {
-      chrome.storage.sync.get(["widgetPosition"], (data) => {
-        const pos = data.widgetPosition;
-        if (pos && pos.left && pos.top) {
-          host.style.left = pos.left;
-          host.style.top = pos.top;
-          host.style.right = "auto";
-          host.style.bottom = "auto";
-        } else {
-          host.style.right = "16px";
-          host.style.bottom = "16px";
-        }
-      });
-    } catch {
+
+    const {widgetPosition} = await readSyncStorage(["widgetPosition"]);
+    if (widgetPosition?.left && widgetPosition?.top) {
+      host.style.left = widgetPosition.left;
+      host.style.top = widgetPosition.top;
+      host.style.right = "auto";
+      host.style.bottom = "auto";
+    } else {
       host.style.right = "16px";
       host.style.bottom = "16px";
     }
 
     document.body.appendChild(host);
-    makeDraggable(host);
 
-    // Attach shadow root to isolate widget styles from the page
+    makeElementDraggable(host, {
+      onDrop: ({left, top}) => {
+        if (left && top) {
+          writeSyncStorage({widgetPosition: {left, top}});
+        }
+      },
+    });
+
     const shadow = host.attachShadow({mode: "open"});
 
-    // Inject Tailwind CSS into the shadow root (no global CSS leakage)
     try {
       const cssUrl = chrome.runtime.getURL("assets/styles/tailwind.css");
       const res = await fetch(cssUrl);
@@ -561,19 +439,22 @@ function mountApp() {
       console.warn("Impossibile caricare CSS del widget:", err);
     }
 
-    // React app container inside shadow DOM
     const themeContainer = document.createElement("div");
     shadow.appendChild(themeContainer);
-    // default theme dark until storage loads
     themeContainer.classList.add("dark");
+
     const appRoot = document.createElement("div");
     themeContainer.appendChild(appRoot);
+
     const root = createRoot(appRoot);
     root.render(<TimerWidget containerEl={themeContainer} hostEl={host} />);
   };
-  if (document.body) doMount();
-  else window.addEventListener("DOMContentLoaded", doMount, {once: true});
+
+  if (document.body) {
+    doMount();
+  } else {
+    window.addEventListener("DOMContentLoaded", doMount, {once: true});
+  }
 }
 
-// Mount immediately (or after DOM ready) if not present
 mountApp();

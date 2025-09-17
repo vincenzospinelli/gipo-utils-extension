@@ -1,11 +1,13 @@
 import {useEffect, useMemo, useRef, useState} from "react";
 
-// Small helpers
-const clamp = (n, min, max) => Math.max(min, Math.min(max, n));
-const unitToPercent = (u) => Math.round(clamp(u ?? 0, 0, 1) * 100);
-const percentToUnit = (p) => clamp((parseInt(p, 10) || 0) / 100, 0, 1);
+import {DEFAULT_DURATION, DEFAULT_PEOPLE} from "../shared/constants";
+import {ensureUnitVolume, percentToUnit, unitToPercent} from "../shared/audio";
+import {sanitizePeopleList} from "../shared/people";
+import {readSyncStorage, writeSyncStorage} from "../shared/storage";
 
-// Tiny toast hook + component
+import {SoundSettings} from "./components/SoundSettings";
+
+
 function useAutoToast(timeout = 1200) {
   const [message, setMessage] = useState("");
   const timer = useRef(null);
@@ -24,26 +26,6 @@ const Toast = ({message}) =>
       {message}
     </div>
   ) : null;
-
-const defaultPeople = [
-  {name: "Alessandro M", jiraId: ""},
-  {name: "Claudio B", jiraId: ""},
-  {name: "Diego M", jiraId: ""},
-  {name: "Elisa C", jiraId: ""},
-  {name: "Enrico S", jiraId: ""},
-  {name: "Fede D", jiraId: ""},
-  {name: "Fede G", jiraId: ""},
-  {name: "Francesco A", jiraId: ""},
-  {name: "Gabriele R", jiraId: ""},
-  {name: "Luca M", jiraId: ""},
-  {name: "Matteo T", jiraId: ""},
-  {name: "Nicola L", jiraId: ""},
-  {name: "Roberto M", jiraId: ""},
-  {name: "Stefano S", jiraId: ""},
-  {name: "Vincenzo S", jiraId: ""},
-];
-
-const defaultDuration = 60;
 
 export function OptionsApp() {
   const [active, setActive] = useState("timer");
@@ -100,48 +82,51 @@ export function OptionsApp() {
 }
 
 function TimerTab() {
-  const [people, setPeople] = useState(defaultPeople);
-  const [duration, setDuration] = useState(defaultDuration);
+  const [people, setPeople] = useState(DEFAULT_PEOPLE);
+  const [duration, setDuration] = useState(DEFAULT_DURATION);
   const [filterJiraByUser, setFilterJiraByUser] = useState(false);
   const [soundsEnabled, setSoundsEnabled] = useState(true);
   const [audioVolume, setAudioVolume] = useState(10);
 
   useEffect(() => {
-    chrome.storage.sync.get(
-      [
-        "peopleWithIds",
-        "duration",
-        "filterJiraByUser",
-        "audioMuted",
-        "audioVolume",
-      ],
-      (data) => {
-        setPeople(data.peopleWithIds || defaultPeople);
-        setDuration(parseInt(data.duration, 10) || defaultDuration);
-        setFilterJiraByUser(Boolean(data.filterJiraByUser));
-        setSoundsEnabled(!Boolean(data.audioMuted));
-        setAudioVolume(
-          typeof data.audioVolume === "number"
-            ? unitToPercent(data.audioVolume)
-            : 10
-        );
-        if (!data.peopleWithIds || !data.duration) {
-          chrome.storage.sync.set({
-            peopleWithIds: data.peopleWithIds || defaultPeople,
-            duration: data.duration || defaultDuration,
-          });
-        }
+    let active = true;
+    readSyncStorage([
+      "peopleWithIds",
+      "duration",
+      "filterJiraByUser",
+      "audioMuted",
+      "audioVolume",
+    ]).then((data) => {
+      if (!active) return;
+      const storedPeople = Array.isArray(data.peopleWithIds)
+        ? data.peopleWithIds
+        : DEFAULT_PEOPLE;
+      setPeople(storedPeople);
+      const storedDuration = parseInt(data.duration, 10);
+      setDuration(
+        !Number.isNaN(storedDuration) && storedDuration > 0
+          ? storedDuration
+          : DEFAULT_DURATION
+      );
+      setFilterJiraByUser(Boolean(data.filterJiraByUser));
+      setSoundsEnabled(!Boolean(data.audioMuted));
+      setAudioVolume(unitToPercent(ensureUnitVolume(data.audioVolume, 0.1)));
+      if (!data.peopleWithIds || !data.duration) {
+        writeSyncStorage({
+          peopleWithIds: sanitizePeopleList(storedPeople),
+          duration: storedDuration || DEFAULT_DURATION,
+        });
       }
-    );
+    });
+    return () => {
+      active = false;
+    };
   }, []);
 
   const {toastMessage: timerToast, showToast: showTimerToast} = useAutoToast();
 
   const persistPeople = (list) => {
-    const cleaned = list
-      .filter((p) => p.name?.trim())
-      .map((p) => ({name: p.name.trim(), jiraId: (p.jiraId || "").trim()}));
-    chrome.storage.sync.set({peopleWithIds: cleaned});
+    writeSyncStorage({peopleWithIds: sanitizePeopleList(list)});
     showTimerToast();
   };
 
@@ -152,12 +137,14 @@ function TimerTab() {
       return next;
     });
   };
+
   const addPerson = () =>
     setPeople((prev) => {
       const next = [...prev, {name: "", jiraId: ""}];
       persistPeople(next);
       return next;
     });
+
   const removePerson = (idx) =>
     setPeople((prev) => {
       const next = prev.filter((_, i) => i !== idx);
@@ -165,19 +152,37 @@ function TimerTab() {
       return next;
     });
 
-  // Live-save duration as user types
   const onDurationChange = (val) => {
-    const n = parseInt(val, 10);
+    const numeric = parseInt(val, 10);
     setDuration(val);
-    if (!Number.isNaN(n) && n > 0) {
-      chrome.storage.sync.set({duration: n});
+    if (!Number.isNaN(numeric) && numeric > 0) {
+      writeSyncStorage({duration: numeric});
       showTimerToast();
     }
   };
 
   const toggleFilter = (checked) => {
     setFilterJiraByUser(checked);
-    chrome.storage.sync.set({filterJiraByUser: checked});
+    writeSyncStorage({filterJiraByUser: checked});
+    showTimerToast();
+  };
+
+  const handleSoundToggle = (enabled) => {
+    setSoundsEnabled(enabled);
+    writeSyncStorage({
+      audioMuted: !enabled,
+      audioVolume: percentToUnit(audioVolume),
+    });
+    showTimerToast();
+  };
+
+  const handleVolumeChange = (vol) => {
+    const safeValue = Number.isNaN(vol) ? 0 : vol;
+    setAudioVolume(safeValue);
+    writeSyncStorage({
+      audioMuted: !soundsEnabled,
+      audioVolume: percentToUnit(safeValue),
+    });
     showTimerToast();
   };
 
@@ -262,63 +267,27 @@ function TimerTab() {
         </label>
       </div>
 
-      <div className="flex items-center gap-2 mb-2">
-        <input
-          type="checkbox"
-          id="timer-sounds-enabled"
-          checked={soundsEnabled}
-          onChange={(e) => {
-            const enabled = e.target.checked;
-            setSoundsEnabled(enabled);
-            chrome.storage.sync.set({
-              audioMuted: !enabled,
-              audioVolume: Math.max(0, Math.min(1, audioVolume / 100)),
-            });
-            showTimerToast();
-          }}
-          className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+      <div className="mb-4">
+        <SoundSettings
+          checkboxId="timer-sounds-enabled"
+          sliderId="timer-audio-volume"
+          enabled={soundsEnabled}
+          volume={audioVolume}
+          onToggle={handleSoundToggle}
+          onVolumeChange={handleVolumeChange}
+          enabledLabel="Suoni timer abilitati (beep e tick)"
+          volumeLabel="Volume suoni"
         />
-        <label
-          htmlFor="timer-sounds-enabled"
-          className="text-sm font-medium text-gray-700"
-        >
-          Suoni timer abilitati (beep e tick)
-        </label>
       </div>
-
-      <label
-        htmlFor="timer-audio-volume"
-        className="block text-sm font-medium text-gray-700 mb-1"
-      >
-        Volume suoni: {audioVolume}%
-      </label>
-      <input
-        type="range"
-        id="timer-audio-volume"
-        min={0}
-        max={100}
-        step={1}
-        value={audioVolume}
-        onChange={(e) => {
-          const vol = parseInt(e.target.value, 10);
-          setAudioVolume(vol);
-          chrome.storage.sync.set({
-            audioMuted: !soundsEnabled,
-            audioVolume: Math.max(0, Math.min(1, vol / 100)),
-          });
-          showTimerToast();
-        }}
-        className="w-full mb-4"
-      />
       <Toast message={timerToast} />
     </div>
   );
 }
 
 function WheelTab() {
-  const [people, setPeople] = useState(defaultPeople);
+  const [people, setPeople] = useState(DEFAULT_PEOPLE);
   const [textarea, setTextarea] = useState(
-    defaultPeople.map((p) => p.name).join("\n")
+    DEFAULT_PEOPLE.map((p) => p.name).join("\n")
   );
   const [winner, setWinner] = useState("");
   const [lastWinner, setLastWinner] = useState(null);
@@ -336,6 +305,26 @@ function WheelTab() {
   const confettiParticlesRef = useRef([]);
   const wheelAudioRef = useRef(null);
   const {toastMessage: wheelToast, showToast: showWheelToast} = useAutoToast();
+
+  const handleWheelToggle = (enabled) => {
+    setWheelSoundsEnabled(enabled);
+    writeSyncStorage({
+      wheelAudioMuted: !enabled,
+      wheelAudioVolume: percentToUnit(wheelAudioVolume),
+    });
+    showWheelToast();
+  };
+
+  const handleWheelVolumeChange = (vol) => {
+    const safeValue = Number.isNaN(vol) ? 0 : vol;
+    setWheelAudioVolume(safeValue);
+    writeSyncStorage({
+      wheelAudioMuted: !wheelSoundsEnabled,
+      wheelAudioVolume: percentToUnit(safeValue),
+    });
+    showWheelToast();
+  };
+
   const [wheelSoundsEnabled, setWheelSoundsEnabled] = useState(true);
   const [wheelAudioVolume, setWheelAudioVolume] = useState(10); // percent 0..100
   // Post-win animation state
@@ -345,32 +334,30 @@ function WheelTab() {
   const POINTER = Math.PI / 2; // pointer at South in canvas coordinates (0 = East)
 
   useEffect(() => {
-    chrome.storage.sync.get(
-      ["peopleWithIds", "wheelAudioMuted", "wheelAudioVolume"],
-      (data) => {
-        const pw = data.peopleWithIds || defaultPeople;
-        setPeople(pw);
-        setTextarea(pw.map((p) => p.name).join("\n"));
-        drawWheel(pw.map((p) => p.name));
-        // audio settings
-        const vol =
-          typeof data.wheelAudioVolume === "number"
-            ? unitToPercent(data.wheelAudioVolume)
-            : 10;
-        setWheelSoundsEnabled(!Boolean(data.wheelAudioMuted));
-        setWheelAudioVolume(vol);
-        // apply volume to audio element
-        if (wheelAudioRef.current) {
-          wheelAudioRef.current.volume = !data.wheelAudioMuted
-            ? percentToUnit(vol)
-            : 0;
-        }
+    let active = true;
+    readSyncStorage(["peopleWithIds", "wheelAudioMuted", "wheelAudioVolume"]).then((data) => {
+      if (!active) return;
+      const storedPeople = Array.isArray(data.peopleWithIds)
+        ? data.peopleWithIds
+        : DEFAULT_PEOPLE;
+      setPeople(storedPeople);
+      setTextarea(storedPeople.map((p) => p.name).join("\n"));
+      drawWheel(storedPeople.map((p) => p.name));
+      const volumeUnit = ensureUnitVolume(data.wheelAudioVolume, 0.1);
+      const volumePercent = unitToPercent(volumeUnit);
+      setWheelSoundsEnabled(!Boolean(data.wheelAudioMuted));
+      setWheelAudioVolume(volumePercent);
+      if (wheelAudioRef.current) {
+        wheelAudioRef.current.volume = !data.wheelAudioMuted ? volumeUnit : 0;
       }
-    );
+    });
     const c = confettiCanvasRef.current;
     if (c) {
       confettiCtxRef.current = c.getContext("2d");
     }
+    return () => {
+      active = false;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -378,7 +365,7 @@ function WheelTab() {
   useEffect(() => {
     if (wheelAudioRef.current) {
       wheelAudioRef.current.volume = wheelSoundsEnabled
-        ? Math.max(0, Math.min(1, wheelAudioVolume / 100))
+        ? percentToUnit(wheelAudioVolume)
         : 0;
     }
   }, [wheelSoundsEnabled, wheelAudioVolume]);
@@ -527,7 +514,7 @@ function WheelTab() {
         setTextarea(updatedNames.join("\n"));
         const updatedPeople = people.filter((p) => p.name !== selectedPerson);
         setPeople(updatedPeople);
-        chrome.storage.sync.set({peopleWithIds: updatedPeople});
+        writeSyncStorage({peopleWithIds: sanitizePeopleList(updatedPeople)});
         setSelectedIndex(-1);
         drawWheel(updatedNames);
         return;
@@ -569,7 +556,7 @@ function WheelTab() {
         return found || {name};
       });
       setPeople(updated);
-      chrome.storage.sync.set({peopleWithIds: updated});
+      writeSyncStorage({peopleWithIds: sanitizePeopleList(updated)});
       showWheelToast();
     }, 300);
     return () => clearTimeout(handle);
@@ -577,11 +564,11 @@ function WheelTab() {
   }, [names]);
 
   function onReset() {
-    setPeople(defaultPeople);
-    setTextarea(defaultPeople.map((p) => p.name).join("\n"));
-    chrome.storage.sync.set({peopleWithIds: defaultPeople});
+    setPeople(DEFAULT_PEOPLE);
+    setTextarea(DEFAULT_PEOPLE.map((p) => p.name).join("\n"));
+    writeSyncStorage({peopleWithIds: sanitizePeopleList(DEFAULT_PEOPLE)});
     showWheelToast();
-    drawWheel(defaultPeople.map((p) => p.name));
+    drawWheel(DEFAULT_PEOPLE.map((p) => p.name));
     // Reset motion refs
     angleRef.current = 0;
     velRef.current = 0;
@@ -602,7 +589,7 @@ function WheelTab() {
       (name) => people.find((p) => p.name === name) || {name}
     );
     setPeople(shuffledPeople);
-    chrome.storage.sync.set({peopleWithIds: shuffledPeople});
+    writeSyncStorage({peopleWithIds: sanitizePeopleList(shuffledPeople)});
     showWheelToast();
     drawWheel(arr);
   }
@@ -718,55 +705,15 @@ function WheelTab() {
             className="text-sm text-green-600 h-5 mt-2"
           ></div>
           <div className="mt-4">
-            <div className="flex items-center gap-2 mb-2">
-              <input
-                type="checkbox"
-                id="wheel-sounds-enabled"
-                checked={wheelSoundsEnabled}
-                onChange={(e) => {
-                  const enabled = e.target.checked;
-                  setWheelSoundsEnabled(enabled);
-                  chrome.storage.sync.set({
-                    wheelAudioMuted: !enabled,
-                    wheelAudioVolume: Math.max(
-                      0,
-                      Math.min(1, wheelAudioVolume / 100)
-                    ),
-                  });
-                  showWheelToast();
-                }}
-                className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-              />
-              <label
-                htmlFor="wheel-sounds-enabled"
-                className="text-sm font-medium text-gray-700"
-              >
-                Suono proclamazione vincitore abilitato
-              </label>
-            </div>
-            <label
-              htmlFor="wheel-audio-volume"
-              className="block text-sm font-medium text-gray-700 mb-1"
-            >
-              Volume suono: {wheelAudioVolume}%
-            </label>
-            <input
-              type="range"
-              id="wheel-audio-volume"
-              min={0}
-              max={100}
-              step={1}
-              value={wheelAudioVolume}
-              onChange={(e) => {
-                const vol = parseInt(e.target.value, 10);
-                setWheelAudioVolume(vol);
-                chrome.storage.sync.set({
-                  wheelAudioMuted: !wheelSoundsEnabled,
-                  wheelAudioVolume: Math.max(0, Math.min(1, vol / 100)),
-                });
-                showWheelToast();
-              }}
-              className="w-full"
+            <SoundSettings
+              checkboxId="wheel-sounds-enabled"
+              sliderId="wheel-audio-volume"
+              enabled={wheelSoundsEnabled}
+              volume={wheelAudioVolume}
+              onToggle={handleWheelToggle}
+              onVolumeChange={handleWheelVolumeChange}
+              enabledLabel="Suono proclamazione vincitore abilitato"
+              volumeLabel="Volume suono"
             />
           </div>
           <Toast message={wheelToast} />
