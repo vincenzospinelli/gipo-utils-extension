@@ -17,9 +17,21 @@ import {sanitizePresets, summarizeHistory} from "../shared/timer";
 import {SoundSettings} from "./components/SoundSettings";
 
 const CARD_BASE_CLASS =
-  "bg-white shadow-lg rounded-lg w-full max-w-4xl min-h-[640px] flex flex-col";
+  "bg-white shadow-lg rounded-lg w-full max-w-4xl md:w-[960px] flex-shrink-0 h-[720px] flex flex-col overflow-hidden";
 const CARD_HEADER_CLASS = "flex-none px-8 py-6 border-b border-gray-100";
 const CARD_BODY_CLASS = "flex-1 px-8 py-6 overflow-y-auto";
+
+const SettingsSection = ({title, description, children}) => (
+  <section className="border border-gray-200 rounded-lg bg-gray-50 p-4 flex flex-col gap-4">
+    <div>
+      <h3 className="text-lg font-semibold text-gray-800">{title}</h3>
+      {description && (
+        <p className="text-sm text-gray-500 mt-1">{description}</p>
+      )}
+    </div>
+    <div className="flex flex-col gap-3">{children}</div>
+  </section>
+);
 
 function useAutoToast(timeout = 1200) {
   const [message, setMessage] = useState("");
@@ -351,7 +363,7 @@ function TimerTab() {
               className={timerNavClass("general")}
               onClick={() => setTimerSection("general")}
             >
-              Timer
+              Impostazioni
             </button>
             <button
               type="button"
@@ -359,13 +371,6 @@ function TimerTab() {
               onClick={() => setTimerSection("people")}
             >
               Persone
-            </button>
-            <button
-              type="button"
-              className={timerNavClass("reminder")}
-              onClick={() => setTimerSection("reminder")}
-            >
-              Promemoria & Suoni
             </button>
             <button
               type="button"
@@ -379,12 +384,15 @@ function TimerTab() {
         <div className={CARD_BODY_CLASS}>
           {timerSection === "general" && (
             <div className="flex flex-col gap-4">
-              <div>
+              <SettingsSection
+                title="Durata timer"
+                description="Imposta la durata predefinita delle sessioni cronometrate."
+              >
                 <label
                   htmlFor="timer-duration"
-                  className="block text-sm font-medium text-gray-700 mb-1"
+                  className="block text-sm font-medium text-gray-700"
                 >
-                  Durata timer (in secondi)
+                  Durata (secondi)
                 </label>
                 <input
                   type="number"
@@ -395,75 +403,13 @@ function TimerTab() {
                   onChange={(e) => onDurationChange(e.target.value)}
                   className="w-full p-3 border border-gray-300 rounded focus:outline-none focus:ring focus:border-blue-500"
                 />
-              </div>
+              </SettingsSection>
 
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="jira-user-filter"
-                  checked={filterJiraByUser}
-                  onChange={(e) => toggleFilter(e.target.checked)}
-                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                />
-                <label
-                  htmlFor="jira-user-filter"
-                  className="text-sm font-medium text-gray-700"
-                >
-                  Filtra la board Jira per utente (Beta)
-                </label>
-              </div>
-            </div>
-          )}
-
-          {timerSection === "people" && (
-            <div className="flex flex-col gap-4">
-              <p className="text-sm text-gray-500">
-                Gestisci il roster del team e gli eventuali Jira ID associati.
-              </p>
-              <div className="flex flex-col gap-2">
-                {people.map((p, i) => (
-                  <div key={i} className="flex gap-2 items-center">
-                    <input
-                      type="text"
-                      placeholder="Nome"
-                      value={p.name}
-                      onChange={(e) => updatePerson(i, "name", e.target.value)}
-                      className="flex-grow border rounded p-2"
-                    />
-                    <input
-                      type="text"
-                      placeholder="Jira ID (opzionale)"
-                      value={p.jiraId || ""}
-                      onChange={(e) =>
-                        updatePerson(i, "jiraId", e.target.value)
-                      }
-                      className="w-full border rounded p-2"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => removePerson(i)}
-                      className="text-red-600 font-bold px-2 py-1 hover:text-red-800"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                ))}
-              </div>
-              <button
-                id="add-person"
-                type="button"
-                onClick={addPerson}
-                className="self-start bg-gray-300 hover:bg-gray-400 text-gray-800 font-semibold py-2 px-4 rounded"
+              <SettingsSection
+                title="Promemoria fine turno"
+                description="Ricevi un avviso quando sta per scadere il tempo."
               >
-                + Aggiungi Persona
-              </button>
-            </div>
-          )}
-
-          {timerSection === "reminder" && (
-            <div className="flex flex-col gap-6">
-              <div>
-                <div className="flex items-center gap-2 mb-2">
+                <div className="flex items-center gap-2">
                   <input
                     type="checkbox"
                     id="timer-reminder-enabled"
@@ -480,7 +426,7 @@ function TimerTab() {
                 </div>
                 <label
                   htmlFor="timer-reminder-seconds"
-                  className="block text-sm font-medium text-gray-700 mb-1"
+                  className="block text-sm font-medium text-gray-700"
                 >
                   Avvisa quando mancano (secondi)
                 </label>
@@ -493,76 +439,159 @@ function TimerTab() {
                   disabled={!reminderEnabled}
                   className="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
                 />
-              </div>
+              </SettingsSection>
 
-              <SoundSettings
-                checkboxId="timer-sounds-enabled"
-                sliderId="timer-audio-volume"
-                enabled={soundsEnabled}
-                volume={audioVolume}
-                onToggle={handleSoundToggle}
-                onVolumeChange={handleVolumeChange}
-                enabledLabel="Suoni timer abilitati (beep e tick)"
-                volumeLabel="Volume suoni"
-              />
+              <SettingsSection
+                title="Suoni timer"
+                description="Attiva o disattiva i suoni del timer e regola il volume."
+              >
+                <SoundSettings
+                  checkboxId="timer-sounds-enabled"
+                  sliderId="timer-audio-volume"
+                  enabled={soundsEnabled}
+                  volume={audioVolume}
+                  onToggle={handleSoundToggle}
+                  onVolumeChange={handleVolumeChange}
+                  enabledLabel="Suoni timer abilitati (beep e tick)"
+                  volumeLabel="Volume suoni"
+                />
+              </SettingsSection>
+
+              <SettingsSection
+                title="Automazioni Jira"
+                description="Sincronizza automaticamente il filtro assignee della board."
+              >
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="jira-user-filter"
+                    checked={filterJiraByUser}
+                    onChange={(e) => toggleFilter(e.target.checked)}
+                    className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                  />
+                  <label
+                    htmlFor="jira-user-filter"
+                    className="text-sm font-medium text-gray-700"
+                  >
+                    Filtra la board Jira per utente (Beta)
+                  </label>
+                </div>
+              </SettingsSection>
+            </div>
+          )}
+
+          {timerSection === "people" && (
+            <div className="flex flex-col gap-4">
+              <SettingsSection
+                title="Persone"
+                description="Aggiorna il roster del team e gli eventuali Jira ID."
+              >
+                <div className="flex flex-col gap-2">
+                  {people.map((p, i) => (
+                    <div key={i} className="flex gap-2 items-center">
+                      <input
+                        type="text"
+                        placeholder="Nome"
+                        value={p.name}
+                        onChange={(e) =>
+                          updatePerson(i, "name", e.target.value)
+                        }
+                        className="flex-grow border rounded p-2"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Jira ID (opzionale)"
+                        value={p.jiraId || ""}
+                        onChange={(e) =>
+                          updatePerson(i, "jiraId", e.target.value)
+                        }
+                        className="w-full border rounded p-2"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removePerson(i)}
+                        className="text-red-600 hover:text-red-800 disabled:text-gray-400"
+                      >
+                        Rimuovi
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <button
+                  id="add-person"
+                  type="button"
+                  onClick={addPerson}
+                  className="self-start bg-gray-300 hover:bg-gray-400 text-gray-800 font-semibold py-2 px-4 rounded"
+                >
+                  Aggiungi
+                </button>
+              </SettingsSection>
             </div>
           )}
 
           {timerSection === "presets" && (
             <div className="flex flex-col gap-4">
-              <p className="text-sm text-gray-500">
-                I preset vengono mostrati come scorciatoie nel widget del timer.
-              </p>
-              {presets.length ? (
-                <div className="flex flex-col gap-2">
-                  {presets.map((preset) => {
-                    const minutesValue = preset / 60;
-                    const minutesLabel = Number.isInteger(minutesValue)
-                      ? `${minutesValue} min`
-                      : `${minutesValue.toFixed(1)} min`;
-                    return (
-                      <div
-                        key={preset}
-                        className="flex items-center justify-between border border-gray-200 rounded px-3 py-2 text-sm"
-                      >
-                        <span className="font-mono">
-                          {formatDuration(preset * 1000)} ({minutesLabel})
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => removePreset(preset)}
-                          disabled={presets.length <= 1}
-                          className="text-red-600 hover:text-red-800 disabled:text-gray-400"
+              <SettingsSection
+                title="Preset attivi"
+                description="Questi preset compaiono come scorciatoie nel widget del timer."
+              >
+                {presets.length ? (
+                  <div className="flex flex-col gap-2">
+                    {presets.map((preset) => {
+                      const minutesValue = preset / 60;
+                      const minutesLabel = Number.isInteger(minutesValue)
+                        ? `${minutesValue} min`
+                        : `${minutesValue.toFixed(1)} min`;
+                      return (
+                        <div
+                          key={preset}
+                          className="flex items-center justify-between border border-gray-200 rounded px-3 py-2 text-sm"
                         >
-                          Rimuovi
-                        </button>
-                      </div>
-                    );
-                  })}
+                          <span className="font-mono">
+                            {formatDuration(preset * 1000)} ({minutesLabel})
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => removePreset(preset)}
+                            disabled={presets.length <= 1}
+                            className="text-red-600 hover:text-red-800 disabled:text-gray-400"
+                          >
+                            Rimuovi
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500">
+                    Nessun preset configurato.
+                  </p>
+                )}
+              </SettingsSection>
+
+              <SettingsSection
+                title="Nuovo preset"
+                description="Aggiungi un nuovo slot espresso in minuti."
+              >
+                <div className="flex gap-2">
+                  <input
+                    type="number"
+                    min={1}
+                    step={1}
+                    value={newPresetMinutes}
+                    onChange={(e) => setNewPresetMinutes(e.target.value)}
+                    placeholder="Minuti"
+                    className="flex-1 p-2 border border-gray-300 rounded focus:outline-none focus:ring focus:border-blue-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={addPreset}
+                    className="self-start bg-gray-300 hover:bg-gray-400 text-gray-800 font-semibold py-2 px-4 rounded"
+                  >
+                    Aggiungi
+                  </button>
                 </div>
-              ) : (
-                <p className="text-sm text-gray-500">
-                  Nessun preset configurato.
-                </p>
-              )}
-              <div className="flex gap-2 mt-3">
-                <input
-                  type="number"
-                  min={1}
-                  step={1}
-                  value={newPresetMinutes}
-                  onChange={(e) => setNewPresetMinutes(e.target.value)}
-                  placeholder="Minuti"
-                  className="flex-1 p-2 border border-gray-300 rounded focus:outline-none focus:ring focus:border-blue-500"
-                />
-                <button
-                  type="button"
-                  onClick={addPreset}
-                  className="px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-                >
-                  Aggiungi
-                </button>
-              </div>
+              </SettingsSection>
             </div>
           )}
         </div>
@@ -644,7 +673,7 @@ function DashboardTab() {
         <div className={CARD_HEADER_CLASS}>
           <h2 className="text-2xl font-bold text-gray-800">Dashboard</h2>
           <p className="text-sm text-gray-500 mt-2">
-            Panoramica delle sessioni cronometriche accumulate dal widget.
+            Panoramica delle sessioni accumulate dal widget.
           </p>
         </div>
         <div className={`${CARD_BODY_CLASS} space-y-6`}>
@@ -1133,129 +1162,160 @@ function WheelTab() {
               className={wheelNavClass("audio")}
               onClick={() => setWheelSection("audio")}
             >
-              Audio
+              Suoni
             </button>
           </div>
         </div>
         <div className={CARD_BODY_CLASS}>
           {wheelSection === "general" && (
-            <div className="flex flex-wrap gap-8 justify-center items-start">
-              <div className="flex flex-col items-center">
-                <div className="relative mb-4">
-                  <div className="w-0 h-0 border-l-[12px] border-l-transparent border-r-[12px] border-r-transparent border-b-[24px] border-b-red-600 absolute -bottom-6 left-1/2 transform -translate-x-1/2 z-10 drop-shadow-[0_4px_4px_rgba(0,0,0,0.4)]"></div>
-                  <canvas
-                    ref={canvasRef}
-                    id="wheel-canvas"
-                    width="500"
-                    height="500"
-                    className="block"
-                  ></canvas>
+            <div className="flex flex-col gap-4">
+              <SettingsSection
+                title="Anteprima ruota"
+                description="Visualizza la ruota attuale con il puntatore prima di estrarre il prossimo nome."
+              >
+                <div className="flex flex-col items-center">
+                  <div className="relative mb-4">
+                    <div className="w-0 h-0 border-l-[12px] border-l-transparent border-r-[12px] border-r-transparent border-b-[24px] border-b-red-600 absolute -bottom-6 left-1/2 transform -translate-x-1/2 z-10 drop-shadow-[0_4px_4px_rgba(0,0,0,0.4)]"></div>
+                    <canvas
+                      ref={canvasRef}
+                      id="wheel-canvas"
+                      width="500"
+                      height="500"
+                      className="block"
+                    ></canvas>
+                  </div>
+                  <div
+                    id="winner"
+                    className="text-center text-xl font-bold text-blue-700"
+                  >
+                    {winner}
+                  </div>
                 </div>
-                <div
-                  id="winner"
-                  className="mt-4 text-xl font-bold text-blue-700"
-                >
-                  {winner}
+              </SettingsSection>
+
+              <SettingsSection
+                title="Azioni rapide"
+                description="Avvia la ruota, mischia l'ordine o ripristina l'elenco originale."
+              >
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <button
+                    id="spin"
+                    onClick={onSpin}
+                    disabled={spinning}
+                    className={`text-white font-semibold py-2 px-4 rounded ${
+                      spinning
+                        ? "bg-green-400 cursor-not-allowed"
+                        : "bg-green-600 hover:bg-green-700"
+                    }`}
+                  >
+                    {spinning ? "Girando…" : "Gira"}
+                  </button>
+                  <button
+                    id="wheel-shuffle"
+                    onClick={onShuffle}
+                    className="bg-yellow-500 hover:bg-yellow-600 text-white font-semibold py-2 px-4 rounded"
+                  >
+                    Mischia
+                  </button>
+                  <button
+                    id="wheel-reset"
+                    onClick={onReset}
+                    className="bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded"
+                  >
+                    Ripristina
+                  </button>
                 </div>
-              </div>
-              <div className="flex flex-col gap-3 w-full sm:w-64">
-                <button
-                  id="spin"
-                  onClick={onSpin}
-                  disabled={spinning}
-                  className={`text-white font-semibold py-2 px-4 rounded ${
-                    spinning
-                      ? "bg-green-400 cursor-not-allowed"
-                      : "bg-green-600 hover:bg-green-700"
-                  }`}
-                >
-                  {spinning ? "Girando…" : "Gira"}
-                </button>
-                <button
-                  id="wheel-shuffle"
-                  onClick={onShuffle}
-                  className="bg-yellow-500 hover:bg-yellow-600 text-white font-semibold py-2 px-4 rounded"
-                >
-                  Mischia
-                </button>
-                <button
-                  id="wheel-reset"
-                  onClick={onReset}
-                  className="bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded"
-                >
-                  Ripristina
-                </button>
                 <div
                   id="wheel-status"
                   className="text-sm text-green-600 h-5"
                 ></div>
-              </div>
+              </SettingsSection>
             </div>
           )}
 
           {wheelSection === "participants" && (
-            <div className="flex flex-col md:flex-row gap-6">
-              <div className="flex-1">
-                <h3 className="text-lg font-semibold text-gray-800 mb-2">
-                  Partecipanti
-                </h3>
+            <div className="flex flex-col gap-4">
+              <SettingsSection
+                title="Elenco partecipanti"
+                description="Aggiungi o rimuovi nomi dalla ruota. Le modifiche vengono salvate automaticamente."
+              >
                 <textarea
                   id="wheel-person-list"
                   rows={18}
                   placeholder="Una persona per riga..."
                   value={textarea}
                   onChange={(e) => setTextarea(e.target.value)}
-                  className="w-full p-3 border border-gray-300 rounded mb-4 focus:outline-none focus:ring focus:border-blue-500"
+                  className="w-full p-3 border border-gray-300 rounded focus:outline-none focus:ring focus:border-blue-500"
                 ></textarea>
-              </div>
-              <div className="flex flex-col gap-3 w-full md:w-64">
-                <button
-                  onClick={onReset}
-                  className="bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded"
-                >
-                  Ripristina
-                </button>
-              </div>
+              </SettingsSection>
+
+              <SettingsSection
+                title="Strumenti elenco"
+                description="Gestisci l'ordine dei partecipanti salvati."
+              >
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <button
+                    onClick={onShuffle}
+                    className="bg-yellow-500 hover:bg-yellow-600 text-white font-semibold py-2 px-4 rounded"
+                  >
+                    Mischia elenco
+                  </button>
+                  <button
+                    onClick={onReset}
+                    className="bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded"
+                  >
+                    Ripristina elenco iniziale
+                  </button>
+                </div>
+                <p className="text-xs text-gray-500">
+                  Ultimo vincitore estratto: {lastWinner || "--"}
+                </p>
+              </SettingsSection>
             </div>
           )}
 
           {wheelSection === "audio" && (
             <div className="flex flex-col gap-4">
-              <div className="flex items-center gap-2 mb-2">
-                <input
-                  type="checkbox"
-                  id="wheel-sounds-enabled"
-                  checked={wheelSoundsEnabled}
-                  onChange={(e) => handleWheelToggle(e.target.checked)}
-                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                />
-                <label
-                  htmlFor="wheel-sounds-enabled"
-                  className="text-sm font-medium text-gray-700"
-                >
-                  Suono proclamazione vincitore abilitato
-                </label>
-              </div>
-              <div>
-                <label
-                  htmlFor="wheel-audio-volume"
-                  className="block text-sm font-medium text-gray-700 mb-1"
-                >
-                  Volume suono: {wheelAudioVolume}%
-                </label>
-                <input
-                  type="range"
-                  id="wheel-audio-volume"
-                  min={0}
-                  max={100}
-                  step={1}
-                  value={wheelAudioVolume}
-                  onChange={(e) =>
-                    handleWheelVolumeChange(parseInt(e.target.value, 10))
-                  }
-                  className="w-full"
-                />
-              </div>
+              <SettingsSection
+                title="Suoni della ruota"
+                description="Gestisci il suono riprodotto quando viene annunciato un vincitore."
+              >
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="wheel-sounds-enabled"
+                    checked={wheelSoundsEnabled}
+                    onChange={(e) => handleWheelToggle(e.target.checked)}
+                    className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                  />
+                  <label
+                    htmlFor="wheel-sounds-enabled"
+                    className="text-sm font-medium text-gray-700"
+                  >
+                    Suono proclamazione vincitore abilitato
+                  </label>
+                </div>
+                <div>
+                  <label
+                    htmlFor="wheel-audio-volume"
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                  >
+                    Volume suono: {wheelAudioVolume}%
+                  </label>
+                  <input
+                    type="range"
+                    id="wheel-audio-volume"
+                    min={0}
+                    max={100}
+                    step={1}
+                    value={wheelAudioVolume}
+                    onChange={(e) =>
+                      handleWheelVolumeChange(parseInt(e.target.value, 10))
+                    }
+                    className="w-full"
+                  />
+                </div>
+              </SettingsSection>
             </div>
           )}
         </div>
