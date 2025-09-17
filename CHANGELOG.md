@@ -1,3 +1,11 @@
+## [2.1.1] - 2025-09-17
+
+### ♻️ Refactor
+
+- Estratti moduli condivisi per storage, audio, tempo e lista persone così da eliminare duplicazioni tra widget e opzioni.
+- Timer widget suddiviso in componenti dedicati (menu, controlli, orologio, audio) e uso esteso di hook per una logica più leggibile.
+- Pagina opzioni aggiornata con componenti riutilizzabili (SoundSettings) e persistenza centralizzata tramite gli helper comuni.
+
 ## [2.1.0] - 2025-09-15
 
 ### ✨ Nuove funzionalità
