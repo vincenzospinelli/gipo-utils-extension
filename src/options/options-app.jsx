@@ -910,9 +910,10 @@ function WheelTab() {
   );
 
   useEffect(() => {
+    if (wheelSection !== "general") return;
     drawWheel(names);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [names, selectedIndex]);
+  }, [names, selectedIndex, wheelSection]);
 
   function drawWheel(namesList) {
     const canvas = canvasRef.current;
