@@ -5,15 +5,8 @@
 - GipoTimer: promemoria opzionale quando mancano X secondi, con flash della cornice, beep e vibrazione (se disponibile).
 - GipoTimer: preset rapidi personalizzabili (es. 5/10/15 minuti) selezionabili dal widget.
 - Nuova sezione Dashboard: cronologia delle sessioni con riepilogo per persona nelle opzioni e totale parlato mostrato nel widget.
-- Impostazioni GipoTimer organizzate in sotto-tab (Timer, Persone, Promemoria, Preset) per una navigazione più pulita.
-- Configurazione GipoWheel suddivisa in tab (Ruota, Partecipanti, Audio) con card a dimensione uniforme e lista partecipanti in stile GipoTimer.
-- Liste dei partecipanti di Timer e Wheel ora indipendenti (`peopleWithIds` per il timer, `wheelPeople` per la ruota).
-
-### ♻️ Refactor
-
-- Estratti moduli condivisi per storage, audio, tempo e lista persone così da eliminare duplicazioni tra widget e opzioni.
-- Timer widget suddiviso in componenti dedicati (menu, controlli, orologio, audio) e uso esteso di hook per una logica più leggibile.
-- Pagina opzioni aggiornata con componenti riutilizzabili (SoundSettings) e persistenza centralizzata tramite gli helper comuni.
+- Impostazioni GipoTimer organizzate in tab con card a dimensione uniforme.
+- Configurazione GipoWheel suddivisa in tab con card a dimensione uniforme.
 
 ## [2.1.0] - 2025-09-15
 

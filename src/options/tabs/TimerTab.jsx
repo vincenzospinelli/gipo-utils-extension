@@ -1,15 +1,10 @@
 import {useEffect, useState} from "react";
 
-import {SoundSettings} from "../components/SoundSettings";
-import {SettingsSection} from "../components/SettingsSection";
-import {Toast} from "../components/Toast";
 import {
-  CARD_BASE_CLASS,
-  CARD_BODY_CLASS,
-  CARD_HEADER_CLASS,
-} from "../constants/layout";
-import {useAutoToast} from "../hooks/useAutoToast";
-import {ensureUnitVolume, percentToUnit, unitToPercent} from "../../shared/audio";
+  ensureUnitVolume,
+  percentToUnit,
+  unitToPercent,
+} from "../../shared/audio";
 import {
   DEFAULT_DURATION,
   DEFAULT_PEOPLE,
@@ -21,6 +16,15 @@ import {sanitizePeopleList} from "../../shared/people";
 import {readSyncStorage, writeSyncStorage} from "../../shared/storage";
 import {formatDuration} from "../../shared/time";
 import {sanitizePresets} from "../../shared/timer";
+import {SettingsSection} from "../components/SettingsSection";
+import {SoundSettings} from "../components/SoundSettings";
+import {Toast} from "../components/Toast";
+import {
+  CARD_BASE_CLASS,
+  CARD_BODY_CLASS,
+  CARD_HEADER_CLASS,
+} from "../constants/layout";
+import {useAutoToast} from "../hooks/useAutoToast";
 
 export function TimerTab() {
   const [people, setPeople] = useState(DEFAULT_PEOPLE);
@@ -356,7 +360,7 @@ export function TimerTab() {
               </SettingsSection>
 
               <SettingsSection
-                title="Automazioni Jira"
+                title="Automazioni Jira (Beta)"
                 description="Sincronizza automaticamente il filtro assignee della board."
               >
                 <div className="flex items-center gap-2">
@@ -371,7 +375,7 @@ export function TimerTab() {
                     htmlFor="jira-user-filter"
                     className="text-sm font-medium text-gray-700"
                   >
-                    Filtra la board Jira per utente (Beta)
+                    Filtra la board Jira per utente
                   </label>
                 </div>
               </SettingsSection>
@@ -382,7 +386,7 @@ export function TimerTab() {
             <div className="flex flex-col gap-4">
               <SettingsSection
                 title="Persone"
-                description="Aggiorna il roster del team e gli eventuali Jira ID."
+                description="Aggiorna l’elenco del team e associa i relativi Jira ID."
               >
                 <div className="flex flex-col gap-2">
                   {people.map((p, i) => (

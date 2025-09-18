@@ -1,13 +1,5 @@
 import {useEffect, useMemo, useRef, useState} from "react";
 
-import {SettingsSection} from "../components/SettingsSection";
-import {Toast} from "../components/Toast";
-import {
-  CARD_BASE_CLASS,
-  CARD_BODY_CLASS,
-  CARD_HEADER_CLASS,
-} from "../constants/layout";
-import {useAutoToast} from "../hooks/useAutoToast";
 import {
   ensureUnitVolume,
   percentToUnit,
@@ -16,6 +8,14 @@ import {
 import {DEFAULT_PEOPLE} from "../../shared/constants";
 import {sanitizePeopleList} from "../../shared/people";
 import {readSyncStorage, writeSyncStorage} from "../../shared/storage";
+import {SettingsSection} from "../components/SettingsSection";
+import {Toast} from "../components/Toast";
+import {
+  CARD_BASE_CLASS,
+  CARD_BODY_CLASS,
+  CARD_HEADER_CLASS,
+} from "../constants/layout";
+import {useAutoToast} from "../hooks/useAutoToast";
 
 export function WheelTab() {
   const [people, setPeople] = useState(DEFAULT_PEOPLE);
@@ -417,7 +417,7 @@ export function WheelTab() {
                   </div>
                   <div
                     id="winner"
-                    className="text-center text-xl font-bold text-blue-700"
+                    className="text-center text-xl font-bold text-blue-700 mt-2"
                   >
                     {winner}
                   </div>
@@ -517,9 +517,6 @@ export function WheelTab() {
                     Ripristina elenco iniziale
                   </button>
                 </div>
-                <p className="text-xs text-gray-500">
-                  Ultimo vincitore estratto: {lastWinner || "--"}
-                </p>
               </SettingsSection>
             </div>
           )}
