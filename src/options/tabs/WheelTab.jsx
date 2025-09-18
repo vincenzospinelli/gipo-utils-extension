@@ -428,10 +428,10 @@ export function WheelTab() {
             </button>
             <button
               type="button"
-              className={wheelNavClass("audio")}
-              onClick={() => setWheelSection("audio")}
+              className={wheelNavClass("settings")}
+              onClick={() => setWheelSection("settings")}
             >
-              Suoni
+              Impostazioni
             </button>
           </div>
         </div>
@@ -559,7 +559,7 @@ export function WheelTab() {
             </div>
           )}
 
-          {wheelSection === "audio" && (
+          {wheelSection === "settings" && (
             <div className="flex flex-col gap-4">
               <SettingsSection
                 title="Suoni della ruota"
