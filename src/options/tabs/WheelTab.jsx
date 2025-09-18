@@ -5,7 +5,13 @@ import {
   percentToUnit,
   unitToPercent,
 } from "../../shared/audio";
-import {DEFAULT_PEOPLE} from "../../shared/constants";
+import {
+  DEFAULT_PEOPLE,
+  DEFAULT_WHEEL_CONFETTI_ENABLED,
+  DEFAULT_WHEEL_SOUNDS_ENABLED,
+  DEFAULT_WHEEL_VOLUME_PERCENT,
+  DEFAULT_WHEEL_VOLUME_UNIT,
+} from "../../shared/constants";
 import {sanitizePeopleList} from "../../shared/people";
 import {readSyncStorage, writeSyncStorage} from "../../shared/storage";
 import {SettingsSection} from "../components/SettingsSection";
@@ -35,9 +41,15 @@ export function WheelTab() {
   const confettiParticlesRef = useRef([]);
   const wheelAudioRef = useRef(null);
   const {toastMessage: wheelToast, showToast: showWheelToast} = useAutoToast();
-  const [wheelSoundsEnabled, setWheelSoundsEnabled] = useState(true);
-  const [wheelAudioVolume, setWheelAudioVolume] = useState(10);
-  const [wheelConfettiEnabled, setWheelConfettiEnabled] = useState(true);
+  const [wheelSoundsEnabled, setWheelSoundsEnabled] = useState(
+    DEFAULT_WHEEL_SOUNDS_ENABLED
+  );
+  const [wheelAudioVolume, setWheelAudioVolume] = useState(
+    DEFAULT_WHEEL_VOLUME_PERCENT
+  );
+  const [wheelConfettiEnabled, setWheelConfettiEnabled] = useState(
+    DEFAULT_WHEEL_CONFETTI_ENABLED
+  );
   const [wheelSection, setWheelSection] = useState("general");
   const wheelNavClass = (section) =>
     `px-3 py-2 rounded transition-colors ${
@@ -52,6 +64,11 @@ export function WheelTab() {
       wheelAudioMuted: !enabled,
       wheelAudioVolume: percentToUnit(wheelAudioVolume),
     });
+    if (wheelAudioRef.current) {
+      wheelAudioRef.current.volume = enabled
+        ? ensureUnitVolume(percentToUnit(wheelAudioVolume))
+        : 0;
+    }
     showWheelToast();
   };
 
@@ -62,6 +79,11 @@ export function WheelTab() {
       wheelAudioMuted: !wheelSoundsEnabled,
       wheelAudioVolume: percentToUnit(safeValue),
     });
+    if (wheelAudioRef.current) {
+      wheelAudioRef.current.volume = wheelSoundsEnabled
+        ? ensureUnitVolume(percentToUnit(safeValue))
+        : 0;
+    }
     showWheelToast();
   };
 
@@ -127,17 +149,40 @@ export function WheelTab() {
         : DEFAULT_PEOPLE;
       setPeople(storedPeople);
       drawWheel(storedPeople.map((p) => p.name));
-      const volumeUnit = ensureUnitVolume(data.wheelAudioVolume, 0.1);
-      const volumePercent = unitToPercent(volumeUnit);
-      setWheelSoundsEnabled(!Boolean(data.wheelAudioMuted));
-      setWheelAudioVolume(volumePercent);
-      setWheelConfettiEnabled(
-        data.wheelConfettiEnabled === undefined
-          ? true
-          : Boolean(data.wheelConfettiEnabled)
+      const volumeUnit = ensureUnitVolume(
+        data.wheelAudioVolume,
+        DEFAULT_WHEEL_VOLUME_UNIT
       );
+      const volumePercent = unitToPercent(volumeUnit);
+      const soundsEnabledValue =
+        data.wheelAudioMuted === undefined
+          ? DEFAULT_WHEEL_SOUNDS_ENABLED
+          : !Boolean(data.wheelAudioMuted);
+      setWheelSoundsEnabled(soundsEnabledValue);
+      setWheelAudioVolume(volumePercent);
+      const confettiEnabledValue =
+        data.wheelConfettiEnabled === undefined
+          ? DEFAULT_WHEEL_CONFETTI_ENABLED
+          : Boolean(data.wheelConfettiEnabled);
+      setWheelConfettiEnabled(confettiEnabledValue);
       if (wheelAudioRef.current) {
-        wheelAudioRef.current.volume = !data.wheelAudioMuted ? volumeUnit : 0;
+        wheelAudioRef.current.volume = soundsEnabledValue ? volumeUnit : 0;
+      }
+      const defaultsPayload = {};
+      if (!Array.isArray(data.wheelPeople)) {
+        defaultsPayload.wheelPeople = sanitizePeopleList(storedPeople);
+      }
+      if (data.wheelAudioVolume === undefined) {
+        defaultsPayload.wheelAudioVolume = DEFAULT_WHEEL_VOLUME_UNIT;
+      }
+      if (data.wheelAudioMuted === undefined) {
+        defaultsPayload.wheelAudioMuted = !DEFAULT_WHEEL_SOUNDS_ENABLED;
+      }
+      if (data.wheelConfettiEnabled === undefined) {
+        defaultsPayload.wheelConfettiEnabled = DEFAULT_WHEEL_CONFETTI_ENABLED;
+      }
+      if (Object.keys(defaultsPayload).length > 0) {
+        writeSyncStorage(defaultsPayload);
       }
     });
     if (typeof document !== "undefined") {

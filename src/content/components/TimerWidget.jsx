@@ -7,7 +7,11 @@ import {
   DEFAULT_PEOPLE,
   DEFAULT_REMINDER_ENABLED,
   DEFAULT_REMINDER_SECONDS,
+  DEFAULT_TIMER_FILTER_JIRA,
   DEFAULT_TIMER_PRESETS,
+  DEFAULT_TIMER_PRESETS_ENABLED,
+  DEFAULT_TIMER_SOUNDS_ENABLED,
+  DEFAULT_TIMER_VOLUME_UNIT,
   MAX_SESSION_HISTORY,
 } from "../../shared/constants";
 import {ensureIndexInBounds, sanitizePeopleList} from "../../shared/people";
@@ -37,13 +41,17 @@ export function TimerWidget({containerEl, hostEl}) {
   const [duration, setDuration] = useState(DEFAULT_DURATION);
   const [startTime, setStartTime] = useState(null);
   const [pausedMs, setPausedMs] = useState(0);
-  const [filterJiraByUser, setFilterJiraByUser] = useState(false);
+  const [filterJiraByUser, setFilterJiraByUser] = useState(
+    DEFAULT_TIMER_FILTER_JIRA
+  );
   const [theme, setTheme] = useState("dark");
   const [visible, setVisible] = useState(true);
   const [display, setDisplay] = useState("00:00:00");
   const [menuOpen, setMenuOpen] = useState(false);
-  const [audioMuted, setAudioMuted] = useState(false);
-  const [audioVolume, setAudioVolume] = useState(0.1);
+  const [audioMuted, setAudioMuted] = useState(
+    !DEFAULT_TIMER_SOUNDS_ENABLED
+  );
+  const [audioVolume, setAudioVolume] = useState(DEFAULT_TIMER_VOLUME_UNIT);
   const [reminderEnabled, setReminderEnabled] = useState(
     DEFAULT_REMINDER_ENABLED
   );
@@ -52,7 +60,9 @@ export function TimerWidget({containerEl, hostEl}) {
   );
   const [reminderFlash, setReminderFlash] = useState(false);
   const [presets, setPresets] = useState(DEFAULT_TIMER_PRESETS);
-  const [presetsEnabled, setPresetsEnabled] = useState(true);
+  const [presetsEnabled, setPresetsEnabled] = useState(
+    DEFAULT_TIMER_PRESETS_ENABLED
+  );
   const [selectedPreset, setSelectedPreset] = useState(null);
   const [sessionHistory, setSessionHistory] = useState([]);
 
@@ -218,11 +228,23 @@ export function TimerWidget({containerEl, hostEl}) {
           : DEFAULT_DURATION;
       setDuration(safeDuration);
 
-      setFilterJiraByUser(Boolean(data.filterJiraByUser));
+      const filterValue =
+        data.filterJiraByUser === undefined
+          ? DEFAULT_TIMER_FILTER_JIRA
+          : Boolean(data.filterJiraByUser);
+      setFilterJiraByUser(filterValue);
       setTheme(data.theme === "light" ? "light" : "dark");
       setVisible(data.widgetVisible !== false);
-      setAudioMuted(Boolean(data.audioMuted));
-      setAudioVolume(ensureUnitVolume(data.audioVolume, 0.1));
+      const audioMutedValue =
+        data.audioMuted === undefined
+          ? !DEFAULT_TIMER_SOUNDS_ENABLED
+          : Boolean(data.audioMuted);
+      setAudioMuted(audioMutedValue);
+      const audioUnit = ensureUnitVolume(
+        data.audioVolume,
+        DEFAULT_TIMER_VOLUME_UNIT
+      );
+      setAudioVolume(audioUnit);
       setReminderEnabled(
         typeof data.reminderEnabled === "boolean"
           ? data.reminderEnabled
@@ -235,7 +257,10 @@ export function TimerWidget({containerEl, hostEl}) {
           : DEFAULT_REMINDER_SECONDS
       );
       const sanitizedPresets = sanitizePresets(data.timerPresets);
-      const presetsFlag = data.timerPresetsEnabled !== false;
+      const presetsFlag =
+        data.timerPresetsEnabled === undefined
+          ? DEFAULT_TIMER_PRESETS_ENABLED
+          : data.timerPresetsEnabled !== false;
       setPresetsEnabled(presetsFlag);
       setPresets(sanitizedPresets);
       const maybeSelected = sanitizedPresets.includes(safeDuration)
@@ -368,7 +393,12 @@ export function TimerWidget({containerEl, hostEl}) {
       }
 
       if (changes.audioVolume) {
-        setAudioVolume(ensureUnitVolume(changes.audioVolume.newValue, 0.1));
+        setAudioVolume(
+          ensureUnitVolume(
+            changes.audioVolume.newValue,
+            DEFAULT_TIMER_VOLUME_UNIT
+          )
+        );
       }
 
       if (changes.duration) {
@@ -445,7 +475,9 @@ export function TimerWidget({containerEl, hostEl}) {
       }
 
       if (changes.timerPresetsEnabled) {
-        setPresetsEnabled(changes.timerPresetsEnabled.newValue !== false);
+        const enabled = changes.timerPresetsEnabled.newValue !== false;
+        setPresetsEnabled(enabled);
+        if (!enabled) setSelectedPreset(null);
       }
 
       if (changes.sessionHistory) {

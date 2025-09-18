@@ -10,7 +10,12 @@ import {
   DEFAULT_PEOPLE,
   DEFAULT_REMINDER_ENABLED,
   DEFAULT_REMINDER_SECONDS,
+  DEFAULT_TIMER_FILTER_JIRA,
   DEFAULT_TIMER_PRESETS,
+  DEFAULT_TIMER_PRESETS_ENABLED,
+  DEFAULT_TIMER_SOUNDS_ENABLED,
+  DEFAULT_TIMER_VOLUME_PERCENT,
+  DEFAULT_TIMER_VOLUME_UNIT,
 } from "../../shared/constants";
 import {sanitizePeopleList} from "../../shared/people";
 import {readSyncStorage, writeSyncStorage} from "../../shared/storage";
@@ -30,11 +35,17 @@ import {useAutoToast} from "../hooks/useAutoToast";
 export function TimerTab() {
   const [people, setPeople] = useState(DEFAULT_PEOPLE);
   const [duration, setDuration] = useState(DEFAULT_DURATION);
-  const [filterJiraByUser, setFilterJiraByUser] = useState(false);
-  const [soundsEnabled, setSoundsEnabled] = useState(true);
-  const [audioVolume, setAudioVolume] = useState(10);
+  const [filterJiraByUser, setFilterJiraByUser] = useState(
+    DEFAULT_TIMER_FILTER_JIRA
+  );
+  const [soundsEnabled, setSoundsEnabled] = useState(
+    DEFAULT_TIMER_SOUNDS_ENABLED
+  );
+  const [audioVolume, setAudioVolume] = useState(DEFAULT_TIMER_VOLUME_PERCENT);
   const [presets, setPresets] = useState(DEFAULT_TIMER_PRESETS);
-  const [presetsEnabled, setPresetsEnabled] = useState(true);
+  const [presetsEnabled, setPresetsEnabled] = useState(
+    DEFAULT_TIMER_PRESETS_ENABLED
+  );
   const [newPresetMinutes, setNewPresetMinutes] = useState("5");
   const [reminderEnabled, setReminderEnabledState] = useState(
     DEFAULT_REMINDER_ENABLED
@@ -68,9 +79,21 @@ export function TimerTab() {
           ? storedDuration
           : DEFAULT_DURATION
       );
-      setFilterJiraByUser(Boolean(data.filterJiraByUser));
-      setSoundsEnabled(!Boolean(data.audioMuted));
-      setAudioVolume(unitToPercent(ensureUnitVolume(data.audioVolume, 0.1)));
+      const filterValue =
+        data.filterJiraByUser === undefined
+          ? DEFAULT_TIMER_FILTER_JIRA
+          : Boolean(data.filterJiraByUser);
+      setFilterJiraByUser(filterValue);
+      const soundsValue =
+        data.audioMuted === undefined
+          ? DEFAULT_TIMER_SOUNDS_ENABLED
+          : !Boolean(data.audioMuted);
+      setSoundsEnabled(soundsValue);
+      const volumeUnit = ensureUnitVolume(
+        data.audioVolume,
+        DEFAULT_TIMER_VOLUME_UNIT
+      );
+      setAudioVolume(unitToPercent(volumeUnit));
       const reminderEnabledValue =
         typeof data.reminderEnabled === "boolean"
           ? data.reminderEnabled
@@ -84,7 +107,11 @@ export function TimerTab() {
       setReminderSecondsInput(String(safeReminderSeconds));
       const sanitizedPresets = sanitizePresets(data.timerPresets);
       setPresets(sanitizedPresets);
-      setPresetsEnabled(data.timerPresetsEnabled !== false);
+      setPresetsEnabled(
+        data.timerPresetsEnabled === undefined
+          ? DEFAULT_TIMER_PRESETS_ENABLED
+          : data.timerPresetsEnabled !== false
+      );
       const defaultsPayload = {};
       if (!data.peopleWithIds) {
         defaultsPayload.peopleWithIds = sanitizePeopleList(storedPeople);
@@ -102,7 +129,16 @@ export function TimerTab() {
         defaultsPayload.timerPresets = sanitizedPresets;
       }
       if (data.timerPresetsEnabled === undefined) {
-        defaultsPayload.timerPresetsEnabled = true;
+        defaultsPayload.timerPresetsEnabled = DEFAULT_TIMER_PRESETS_ENABLED;
+      }
+      if (data.filterJiraByUser === undefined) {
+        defaultsPayload.filterJiraByUser = DEFAULT_TIMER_FILTER_JIRA;
+      }
+      if (data.audioMuted === undefined) {
+        defaultsPayload.audioMuted = !DEFAULT_TIMER_SOUNDS_ENABLED;
+      }
+      if (data.audioVolume === undefined) {
+        defaultsPayload.audioVolume = DEFAULT_TIMER_VOLUME_UNIT;
       }
       if (Object.keys(defaultsPayload).length > 0) {
         writeSyncStorage(defaultsPayload);
@@ -287,10 +323,10 @@ export function TimerTab() {
             </button>
             <button
               type="button"
-              className={timerNavClass("team")}
-              onClick={() => setTimerSection("team")}
+              className={timerNavClass("people")}
+              onClick={() => setTimerSection("people")}
             >
-              Team
+              Partecipanti
             </button>
             <button
               type="button"
@@ -497,10 +533,10 @@ export function TimerTab() {
             </div>
           )}
 
-          {timerSection === "team" && (
+          {timerSection === "people" && (
             <div className="flex flex-col gap-4">
               <SettingsSection
-                title="Team"
+                title="Persone"
                 description="Aggiorna l’elenco del team e associa i relativi Jira ID."
               >
                 <div className="flex flex-col gap-2">
