@@ -40,7 +40,7 @@ export function TimerTab() {
   const [reminderSecondsInput, setReminderSecondsInput] = useState(
     String(DEFAULT_REMINDER_SECONDS)
   );
-  const [timerSection, setTimerSection] = useState("general");
+  const [timerSection, setTimerSection] = useState("settings");
 
   useEffect(() => {
     let active = true;
@@ -262,8 +262,8 @@ export function TimerTab() {
           <div className="flex flex-wrap gap-2 mt-4">
             <button
               type="button"
-              className={timerNavClass("general")}
-              onClick={() => setTimerSection("general")}
+              className={timerNavClass("settings")}
+              onClick={() => setTimerSection("settings")}
             >
               Impostazioni
             </button>
@@ -284,7 +284,7 @@ export function TimerTab() {
           </div>
         </div>
         <div className={CARD_BODY_CLASS}>
-          {timerSection === "general" && (
+          {timerSection === "settings" && (
             <div className="flex flex-col gap-4">
               <SettingsSection
                 title="Durata timer"
