@@ -1,4 +1,4 @@
-import {useMemo, useRef} from "react";
+import {useMemo, useRef, useState} from "react";
 
 import {TimerAnalogClock} from "../../content/components/TimerAnalogClock";
 import {TimerControls} from "../../content/components/TimerControls";
@@ -12,6 +12,7 @@ const noop = () => {};
 
 export function TimerPreview({people, duration, presets, presetsEnabled = true}) {
   const secondHandRef = useRef(null);
+  const [previewTheme, setPreviewTheme] = useState("light");
 
   const {currentPerson, currentDisplay, previewPresets} = useMemo(() => {
     const validPeople = Array.isArray(people)
@@ -44,8 +45,47 @@ export function TimerPreview({people, duration, presets, presetsEnabled = true})
     return formatDuration(seconds * 1000);
   };
 
+  const isDark = previewTheme === "dark";
+  const containerClasses = [
+    "flex flex-col items-center gap-4 rounded-xl border p-6 transition-colors",
+    isDark
+      ? "dark border-gray-700 bg-gray-900 text-gray-100"
+      : "border-gray-200 bg-gray-50 text-gray-700",
+  ].join(" ");
+
+  const toggleButtonClass = (theme) =>
+    `px-3 py-1 text-sm rounded border transition-colors ${
+      previewTheme === theme
+        ? "bg-blue-600 text-white border-blue-600"
+        : "border-gray-300 text-gray-600 hover:bg-gray-100"
+    }`;
+
+  const disabledMessageClasses = isDark
+    ? "rounded border border-dashed border-gray-600 bg-gray-800 px-4 py-2 text-sm text-gray-300"
+    : "rounded border border-dashed border-gray-300 px-4 py-2 text-sm text-gray-500";
+
+  const helperTextClass = isDark
+    ? "text-xs text-gray-400 text-center"
+    : "text-xs text-gray-500 text-center";
+
   return (
-    <div className="flex flex-col items-center gap-4 rounded-xl border border-gray-200 bg-gray-50 p-6 text-gray-700">
+    <div className={containerClasses}>
+      <div className="self-end -mt-2 -mr-2 flex gap-2">
+        <button
+          type="button"
+          onClick={() => setPreviewTheme("light")}
+          className={toggleButtonClass("light")}
+        >
+          Light
+        </button>
+        <button
+          type="button"
+          onClick={() => setPreviewTheme("dark")}
+          className={toggleButtonClass("dark")}
+        >
+          Dark
+        </button>
+      </div>
       <TimerAnalogClock secondHandRef={secondHandRef} />
       <div className="text-xl font-semibold text-center">{currentPerson}</div>
       <div className="text-2xl font-mono">{currentDisplay}</div>
@@ -63,9 +103,7 @@ export function TimerPreview({people, duration, presets, presetsEnabled = true})
           ))}
         </div>
       ) : (
-        <div className="rounded border border-dashed border-gray-300 px-4 py-2 text-sm text-gray-500">
-          Preset disabilitati
-        </div>
+        <div className={disabledMessageClasses}>Preset disabilitati</div>
       )}
       <div className="pointer-events-none">
         <TimerControls
@@ -76,7 +114,7 @@ export function TimerPreview({people, duration, presets, presetsEnabled = true})
           onNext={noop}
         />
       </div>
-      <p className="text-xs text-gray-500 text-center">
+      <p className={helperTextClass}>
         Anteprima statica: i controlli sono disattivati in questa vista.
       </p>
     </div>
