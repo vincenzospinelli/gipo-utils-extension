@@ -37,6 +37,7 @@ export function WheelTab() {
   const {toastMessage: wheelToast, showToast: showWheelToast} = useAutoToast();
   const [wheelSoundsEnabled, setWheelSoundsEnabled] = useState(true);
   const [wheelAudioVolume, setWheelAudioVolume] = useState(10);
+  const [wheelConfettiEnabled, setWheelConfettiEnabled] = useState(true);
   const [wheelSection, setWheelSection] = useState("general");
   const wheelNavClass = (section) =>
     `px-3 py-2 rounded transition-colors ${
@@ -62,6 +63,20 @@ export function WheelTab() {
       wheelAudioVolume: percentToUnit(safeValue),
     });
     showWheelToast();
+  };
+
+  const handleConfettiToggle = (enabled) => {
+    setWheelConfettiEnabled(enabled);
+    writeSyncStorage({wheelConfettiEnabled: enabled});
+    showWheelToast();
+    if (!enabled) {
+      const canvas = confettiCanvasRef.current;
+      const ctx = confettiCtxRef.current;
+      if (canvas && ctx) {
+        confettiParticlesRef.current = [];
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+      }
+    }
   };
 
   const persistWheelPeople = (list) => {
@@ -104,6 +119,7 @@ export function WheelTab() {
       "wheelPeople",
       "wheelAudioMuted",
       "wheelAudioVolume",
+      "wheelConfettiEnabled",
     ]).then((data) => {
       if (!active) return;
       const storedPeople = Array.isArray(data.wheelPeople)
@@ -115,6 +131,11 @@ export function WheelTab() {
       const volumePercent = unitToPercent(volumeUnit);
       setWheelSoundsEnabled(!Boolean(data.wheelAudioMuted));
       setWheelAudioVolume(volumePercent);
+      setWheelConfettiEnabled(
+        data.wheelConfettiEnabled === undefined
+          ? true
+          : Boolean(data.wheelConfettiEnabled)
+      );
       if (wheelAudioRef.current) {
         wheelAudioRef.current.volume = !data.wheelAudioMuted ? volumeUnit : 0;
       }
@@ -255,7 +276,9 @@ export function WheelTab() {
       const delta =
         ((targetNormalized - normalizedAngle + Math.PI) % TAU) - Math.PI;
       angleRef.current += delta;
-      startConfetti();
+      if (wheelConfettiEnabled) {
+        startConfetti();
+      }
       try {
         if (wheelSoundsEnabled && wheelAudioRef.current) {
           wheelAudioRef.current.currentTime = 0;
@@ -359,6 +382,7 @@ export function WheelTab() {
   }
 
   function startConfetti() {
+    if (!wheelConfettiEnabled) return;
     const canvas = confettiCanvasRef.current;
     if (!canvas) return;
     canvas.width = window.innerWidth;
@@ -421,10 +445,10 @@ export function WheelTab() {
             </button>
             <button
               type="button"
-              className={wheelNavClass("participants")}
-              onClick={() => setWheelSection("participants")}
+              className={wheelNavClass("team")}
+              onClick={() => setWheelSection("team")}
             >
-              Partecipanti
+              Team
             </button>
             <button
               type="button"
@@ -438,10 +462,7 @@ export function WheelTab() {
         <div className={CARD_BODY_CLASS}>
           {wheelSection === "general" && (
             <div className="flex flex-col gap-4">
-              <SettingsSection
-                title="Anteprima ruota"
-                description="Visualizza la ruota attuale con il puntatore prima di estrarre il prossimo nome."
-              >
+              <SettingsSection title="Ruota">
                 <div className="flex flex-col items-center">
                   <div className="relative mb-4">
                     <div className="w-0 h-0 border-l-[12px] border-l-transparent border-r-[12px] border-r-transparent border-b-[24px] border-b-red-600 absolute -bottom-6 left-1/2 transform -translate-x-1/2 z-10 drop-shadow-[0_4px_4px_rgba(0,0,0,0.4)]"></div>
@@ -502,10 +523,10 @@ export function WheelTab() {
             </div>
           )}
 
-          {wheelSection === "participants" && (
+          {wheelSection === "team" && (
             <div className="flex flex-col gap-4">
               <SettingsSection
-                title="Elenco partecipanti"
+                title="Team"
                 description="Modifica i nomi della ruota. Ogni riga rappresenta una slice."
               >
                 <div className="flex flex-col gap-2">
@@ -561,6 +582,27 @@ export function WheelTab() {
 
           {wheelSection === "settings" && (
             <div className="flex flex-col gap-4">
+              <SettingsSection
+                title="Effetti grafici"
+                description="Mostra i confetti alla proclamazione del vincitore."
+              >
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="wheel-confetti-enabled"
+                    checked={wheelConfettiEnabled}
+                    onChange={(e) => handleConfettiToggle(e.target.checked)}
+                    className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                  />
+                  <label
+                    htmlFor="wheel-confetti-enabled"
+                    className="text-sm font-medium text-gray-700"
+                  >
+                    Confetti abilitati
+                  </label>
+                </div>
+              </SettingsSection>
+
               <SettingsSection
                 title="Suoni della ruota"
                 description="Gestisci il suono riprodotto quando viene annunciato un vincitore."

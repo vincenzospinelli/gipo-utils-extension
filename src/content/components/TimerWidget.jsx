@@ -1,10 +1,6 @@
 import {X as CloseIcon} from "lucide-react";
 import {useCallback, useEffect, useMemo, useRef, useState} from "react";
 
-import {TimerAnalogClock} from "./TimerAnalogClock";
-import {TimerAudio} from "./TimerAudio";
-import {TimerControls} from "./TimerControls";
-import {TimerMenu} from "./TimerMenu";
 import {applyVolume, ensureUnitVolume} from "../../shared/audio";
 import {
   DEFAULT_DURATION,
@@ -14,20 +10,24 @@ import {
   DEFAULT_TIMER_PRESETS,
   MAX_SESSION_HISTORY,
 } from "../../shared/constants";
-import {sanitizePeopleList, ensureIndexInBounds} from "../../shared/people";
-import {
-  appendSessionHistory,
-  buildSessionEntry,
-  sanitizePresets,
-  summarizeHistory,
-} from "../../shared/timer";
+import {ensureIndexInBounds, sanitizePeopleList} from "../../shared/people";
 import {
   readSyncStorage,
   subscribeSyncStorage,
   writeSyncStorage,
 } from "../../shared/storage";
 import {formatDuration} from "../../shared/time";
+import {
+  appendSessionHistory,
+  buildSessionEntry,
+  sanitizePresets,
+  summarizeHistory,
+} from "../../shared/timer";
 import {changeJiraView} from "../utils/jira";
+import {TimerAnalogClock} from "./TimerAnalogClock";
+import {TimerAudio} from "./TimerAudio";
+import {TimerControls} from "./TimerControls";
+import {TimerMenu} from "./TimerMenu";
 
 const HAND_RESET_DEG = -180;
 
@@ -44,10 +44,15 @@ export function TimerWidget({containerEl, hostEl}) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [audioMuted, setAudioMuted] = useState(false);
   const [audioVolume, setAudioVolume] = useState(0.1);
-  const [reminderEnabled, setReminderEnabled] = useState(DEFAULT_REMINDER_ENABLED);
-  const [reminderSeconds, setReminderSeconds] = useState(DEFAULT_REMINDER_SECONDS);
+  const [reminderEnabled, setReminderEnabled] = useState(
+    DEFAULT_REMINDER_ENABLED
+  );
+  const [reminderSeconds, setReminderSeconds] = useState(
+    DEFAULT_REMINDER_SECONDS
+  );
   const [reminderFlash, setReminderFlash] = useState(false);
   const [presets, setPresets] = useState(DEFAULT_TIMER_PRESETS);
+  const [presetsEnabled, setPresetsEnabled] = useState(true);
   const [selectedPreset, setSelectedPreset] = useState(null);
   const [sessionHistory, setSessionHistory] = useState([]);
 
@@ -173,6 +178,7 @@ export function TimerWidget({containerEl, hostEl}) {
 
   const handleSelectPreset = useCallback(
     (seconds) => {
+      if (!presetsEnabled) return;
       if (startTime) return;
       const normalized = Math.round(seconds);
       if (!Number.isFinite(normalized) || normalized <= 0) return;
@@ -180,7 +186,7 @@ export function TimerWidget({containerEl, hostEl}) {
       setSelectedPreset(normalized);
       writeSyncStorage({duration: normalized});
     },
-    [setDuration, setSelectedPreset, startTime]
+    [presetsEnabled, setDuration, setSelectedPreset, startTime]
   );
 
   useEffect(() => {
@@ -196,6 +202,7 @@ export function TimerWidget({containerEl, hostEl}) {
       "reminderEnabled",
       "reminderSeconds",
       "timerPresets",
+      "timerPresetsEnabled",
       "sessionHistory",
     ]).then((data) => {
       if (!active) return;
@@ -228,10 +235,13 @@ export function TimerWidget({containerEl, hostEl}) {
           : DEFAULT_REMINDER_SECONDS
       );
       const sanitizedPresets = sanitizePresets(data.timerPresets);
+      const presetsFlag = data.timerPresetsEnabled !== false;
+      setPresetsEnabled(presetsFlag);
       setPresets(sanitizedPresets);
-      setSelectedPreset(
-        sanitizedPresets.includes(safeDuration) ? safeDuration : null
-      );
+      const maybeSelected = sanitizedPresets.includes(safeDuration)
+        ? safeDuration
+        : null;
+      setSelectedPreset(presetsFlag ? maybeSelected : null);
       const storedHistory = Array.isArray(data.sessionHistory)
         ? data.sessionHistory.slice(0, MAX_SESSION_HISTORY)
         : [];
@@ -248,12 +258,16 @@ export function TimerWidget({containerEl, hostEl}) {
   }, [audioMuted, audioVolume]);
 
   useEffect(() => {
+    if (!presetsEnabled) {
+      setSelectedPreset(null);
+      return;
+    }
     if (presets.includes(duration)) {
       setSelectedPreset(duration);
     } else {
       setSelectedPreset(null);
     }
-  }, [duration, presets]);
+  }, [duration, presets, presetsEnabled]);
 
   useEffect(() => {
     startTimeRef.current = startTime;
@@ -367,7 +381,9 @@ export function TimerWidget({containerEl, hostEl}) {
         const currentStart = startTimeRef.current;
         const currentPaused = pausedMsRef.current;
         const oldMs =
-          !Number.isNaN(oldSeconds) && oldSeconds > 0 ? oldSeconds * 1000 : null;
+          !Number.isNaN(oldSeconds) && oldSeconds > 0
+            ? oldSeconds * 1000
+            : null;
 
         if (currentStart) {
           const remaining = Math.max(0, currentStart - now);
@@ -428,6 +444,10 @@ export function TimerWidget({containerEl, hostEl}) {
         setPresets(sanitized);
       }
 
+      if (changes.timerPresetsEnabled) {
+        setPresetsEnabled(changes.timerPresetsEnabled.newValue !== false);
+      }
+
       if (changes.sessionHistory) {
         const history = Array.isArray(changes.sessionHistory.newValue)
           ? changes.sessionHistory.newValue.slice(0, MAX_SESSION_HISTORY)
@@ -451,10 +471,13 @@ export function TimerWidget({containerEl, hostEl}) {
     }
   }, [reminderEnabled, resetReminderState]);
 
-  useEffect(() => () => {
-    resetReminderState();
-    resetSessionTracking();
-  }, [resetReminderState, resetSessionTracking]);
+  useEffect(
+    () => () => {
+      resetReminderState();
+      resetSessionTracking();
+    },
+    [resetReminderState, resetSessionTracking]
+  );
 
   const changePerson = useCallback(
     (delta) => {
@@ -525,7 +548,13 @@ export function TimerWidget({containerEl, hostEl}) {
       setDisplay(formatDuration(remaining));
     }
     setStartTime(null);
-  }, [accumulateSessionProgress, playBeep, resetReminderState, startTime, stopTick]);
+  }, [
+    accumulateSessionProgress,
+    playBeep,
+    resetReminderState,
+    startTime,
+    stopTick,
+  ]);
 
   const reset = useCallback(() => {
     clearInterval(intervalRef.current);
@@ -593,7 +622,11 @@ export function TimerWidget({containerEl, hostEl}) {
         />
       </div>
       <div className="absolute top-1 right-1 z-10">
-        <button className="gipo-button" onClick={hideWidget} aria-label="Chiudi">
+        <button
+          className="gipo-button"
+          onClick={hideWidget}
+          aria-label="Chiudi"
+        >
           <CloseIcon size={14} />
         </button>
       </div>
@@ -609,21 +642,27 @@ export function TimerWidget({containerEl, hostEl}) {
       <div id="gipo-timer-display" className="text-2xl font-mono">
         {display}
       </div>
-      <div className="flex gap-2 flex-wrap justify-center items-center">
-        {presets.map((preset) => (
-          <button
-            key={preset}
-            type="button"
-            className={`gipo-button ${selectedPreset === preset ? "ring-2 ring-blue-500" : ""}`}
-            disabled={isRunning}
-            onClick={() => handleSelectPreset(preset)}
-            aria-pressed={selectedPreset === preset}
-            title={`Imposta ${formatPresetLabel(preset)}`}
-          >
-            {formatPresetLabel(preset)}
-          </button>
-        ))}
-      </div>
+      {presetsEnabled ? (
+        <div className="flex gap-2 flex-wrap justify-center items-center">
+          {presets.map((preset) => (
+            <button
+              key={preset}
+              type="button"
+              className={`gipo-button ${
+                selectedPreset === preset ? "ring-2 ring-blue-500" : ""
+              }`}
+              disabled={isRunning}
+              onClick={() => handleSelectPreset(preset)}
+              aria-pressed={selectedPreset === preset}
+              title={`Imposta ${formatPresetLabel(preset)}`}
+            >
+              {formatPresetLabel(preset)}
+            </button>
+          ))}
+        </div>
+      ) : (
+        ""
+      )}
       <TimerControls
         onPrev={() => changePerson(-1)}
         onStart={start}

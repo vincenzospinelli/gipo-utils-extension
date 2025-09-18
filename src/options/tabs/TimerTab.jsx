@@ -18,6 +18,7 @@ import {formatDuration} from "../../shared/time";
 import {sanitizePresets} from "../../shared/timer";
 import {SettingsSection} from "../components/SettingsSection";
 import {SoundSettings} from "../components/SoundSettings";
+import {TimerPreview} from "../components/TimerPreview";
 import {Toast} from "../components/Toast";
 import {
   CARD_BASE_CLASS,
@@ -33,6 +34,7 @@ export function TimerTab() {
   const [soundsEnabled, setSoundsEnabled] = useState(true);
   const [audioVolume, setAudioVolume] = useState(10);
   const [presets, setPresets] = useState(DEFAULT_TIMER_PRESETS);
+  const [presetsEnabled, setPresetsEnabled] = useState(true);
   const [newPresetMinutes, setNewPresetMinutes] = useState("5");
   const [reminderEnabled, setReminderEnabledState] = useState(
     DEFAULT_REMINDER_ENABLED
@@ -40,7 +42,7 @@ export function TimerTab() {
   const [reminderSecondsInput, setReminderSecondsInput] = useState(
     String(DEFAULT_REMINDER_SECONDS)
   );
-  const [timerSection, setTimerSection] = useState("settings");
+  const [timerSection, setTimerSection] = useState("timer");
 
   useEffect(() => {
     let active = true;
@@ -53,6 +55,7 @@ export function TimerTab() {
       "reminderEnabled",
       "reminderSeconds",
       "timerPresets",
+      "timerPresetsEnabled",
     ]).then((data) => {
       if (!active) return;
       const storedPeople = Array.isArray(data.peopleWithIds)
@@ -81,6 +84,7 @@ export function TimerTab() {
       setReminderSecondsInput(String(safeReminderSeconds));
       const sanitizedPresets = sanitizePresets(data.timerPresets);
       setPresets(sanitizedPresets);
+      setPresetsEnabled(data.timerPresetsEnabled !== false);
       const defaultsPayload = {};
       if (!data.peopleWithIds) {
         defaultsPayload.peopleWithIds = sanitizePeopleList(storedPeople);
@@ -97,6 +101,9 @@ export function TimerTab() {
       if (!Array.isArray(data.timerPresets)) {
         defaultsPayload.timerPresets = sanitizedPresets;
       }
+      if (data.timerPresetsEnabled === undefined) {
+        defaultsPayload.timerPresetsEnabled = true;
+      }
       if (Object.keys(defaultsPayload).length > 0) {
         writeSyncStorage(defaultsPayload);
       }
@@ -111,6 +118,9 @@ export function TimerTab() {
       if (areaName !== "sync") return;
       if (changes.timerPresets) {
         setPresets(sanitizePresets(changes.timerPresets.newValue));
+      }
+      if (changes.timerPresetsEnabled) {
+        setPresetsEnabled(changes.timerPresetsEnabled.newValue !== false);
       }
     };
     try {
@@ -222,6 +232,7 @@ export function TimerTab() {
   };
 
   const addPreset = () => {
+    if (!presetsEnabled) return;
     const normalized = parseFloat(newPresetMinutes.replace(/,/g, "."));
     if (Number.isNaN(normalized) || normalized <= 0) {
       showTimerToast("Inserisci minuti validi");
@@ -241,6 +252,7 @@ export function TimerTab() {
   };
 
   const removePreset = (seconds) => {
+    if (!presetsEnabled) return;
     if (!presets.includes(seconds)) return;
     if (presets.length <= 1) return;
     const next = presets.filter((preset) => preset !== seconds);
@@ -250,6 +262,12 @@ export function TimerTab() {
     setPresets(sanitized);
     writeSyncStorage({timerPresets: sanitized});
     showTimerToast("Preset aggiornati");
+  };
+
+  const handlePresetToggle = (enabled) => {
+    setPresetsEnabled(enabled);
+    writeSyncStorage({timerPresetsEnabled: enabled});
+    showTimerToast();
   };
 
   return (
@@ -262,28 +280,44 @@ export function TimerTab() {
           <div className="flex flex-wrap gap-2 mt-4">
             <button
               type="button"
+              className={timerNavClass("timer")}
+              onClick={() => setTimerSection("timer")}
+            >
+              Timer
+            </button>
+            <button
+              type="button"
+              className={timerNavClass("team")}
+              onClick={() => setTimerSection("team")}
+            >
+              Team
+            </button>
+            <button
+              type="button"
               className={timerNavClass("settings")}
               onClick={() => setTimerSection("settings")}
             >
               Impostazioni
             </button>
-            <button
-              type="button"
-              className={timerNavClass("people")}
-              onClick={() => setTimerSection("people")}
-            >
-              Partecipanti
-            </button>
-            <button
-              type="button"
-              className={timerNavClass("presets")}
-              onClick={() => setTimerSection("presets")}
-            >
-              Preset
-            </button>
           </div>
         </div>
         <div className={CARD_BODY_CLASS}>
+          {timerSection === "timer" && (
+            <div className="flex flex-col gap-4">
+              <SettingsSection
+                title="Anteprima timer"
+                description="Visualizza come appare il widget GipoTimer con le impostazioni correnti."
+              >
+                <TimerPreview
+                  people={people}
+                  duration={duration}
+                  presets={presets}
+                  presetsEnabled={presetsEnabled}
+                />
+              </SettingsSection>
+            </div>
+          )}
+
           {timerSection === "settings" && (
             <div className="flex flex-col gap-4">
               <SettingsSection
@@ -304,6 +338,103 @@ export function TimerTab() {
                   value={duration}
                   onChange={(e) => onDurationChange(e.target.value)}
                   className="w-full p-3 border border-gray-300 rounded focus:outline-none focus:ring focus:border-blue-500"
+                />
+              </SettingsSection>
+
+              <SettingsSection
+                title="Preset timer"
+                description="Gestisci le scorciatoie disponibili nel widget del timer."
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  <input
+                    type="checkbox"
+                    id="timer-presets-enabled"
+                    checked={presetsEnabled}
+                    onChange={(e) => handlePresetToggle(e.target.checked)}
+                    className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                  />
+                  <label
+                    htmlFor="timer-presets-enabled"
+                    className="text-sm font-medium text-gray-700"
+                  >
+                    Preset abilitati
+                  </label>
+                </div>
+                {presets.length ? (
+                  <div className="flex flex-col gap-2">
+                    {presets.map((preset) => {
+                      const minutesValue = preset / 60;
+                      const minutesLabel = Number.isInteger(minutesValue)
+                        ? `${minutesValue} min`
+                        : `${minutesValue.toFixed(1)} min`;
+                      const disableRemove =
+                        !presetsEnabled || presets.length <= 1;
+                      return (
+                        <div
+                          key={preset}
+                          className="flex items-center justify-between border border-gray-200 rounded px-3 py-2 text-sm"
+                        >
+                          <span className="font-mono">
+                            {formatDuration(preset * 1000)} ({minutesLabel})
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => removePreset(preset)}
+                            disabled={disableRemove}
+                            className="text-red-600 hover:text-red-800 disabled:text-gray-400"
+                          >
+                            Rimuovi
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500">
+                    Nessun preset configurato.
+                  </p>
+                )}
+                <div className="flex gap-2 mt-3">
+                  <input
+                    type="number"
+                    min={1}
+                    step={1}
+                    value={newPresetMinutes}
+                    onChange={(e) => setNewPresetMinutes(e.target.value)}
+                    placeholder="Minuti"
+                    disabled={!presetsEnabled}
+                    className="flex-1 p-2 border border-gray-300 rounded focus:outline-none focus:ring focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  />
+                  <button
+                    type="button"
+                    onClick={addPreset}
+                    disabled={!presetsEnabled}
+                    className="self-start bg-gray-300 hover:bg-gray-400 text-gray-800 font-semibold py-2 px-4 rounded disabled:bg-gray-200 disabled:text-gray-500 disabled:cursor-not-allowed"
+                  >
+                    Aggiungi
+                  </button>
+                </div>
+                {!presetsEnabled && (
+                  <p className="mt-2 text-xs text-gray-500">
+                    I preset restano salvati ma non verranno mostrati nel widget
+                    finché disabilitati.
+                  </p>
+                )}
+              </SettingsSection>
+
+              <SettingsSection
+                title="Suoni timer"
+                description="Attiva o disattiva i suoni del timer e regola il volume."
+              >
+                <SoundSettings
+                  checkboxId="timer-sounds-enabled"
+                  sliderId="timer-audio-volume"
+                  enabled={soundsEnabled}
+                  volume={audioVolume}
+                  onToggle={handleSoundToggle}
+                  onVolumeChange={handleVolumeChange}
+                  enabledLabel="Suoni timer abilitati (beep e tick)"
+                  volumeLabel="Volume suoni"
                 />
               </SettingsSection>
 
@@ -344,22 +475,6 @@ export function TimerTab() {
               </SettingsSection>
 
               <SettingsSection
-                title="Suoni timer"
-                description="Attiva o disattiva i suoni del timer e regola il volume."
-              >
-                <SoundSettings
-                  checkboxId="timer-sounds-enabled"
-                  sliderId="timer-audio-volume"
-                  enabled={soundsEnabled}
-                  volume={audioVolume}
-                  onToggle={handleSoundToggle}
-                  onVolumeChange={handleVolumeChange}
-                  enabledLabel="Suoni timer abilitati (beep e tick)"
-                  volumeLabel="Volume suoni"
-                />
-              </SettingsSection>
-
-              <SettingsSection
                 title="Automazioni Jira (Beta)"
                 description="Sincronizza automaticamente il filtro assignee della board."
               >
@@ -382,10 +497,10 @@ export function TimerTab() {
             </div>
           )}
 
-          {timerSection === "people" && (
+          {timerSection === "team" && (
             <div className="flex flex-col gap-4">
               <SettingsSection
-                title="Persone"
+                title="Team"
                 description="Aggiorna l’elenco del team e associa i relativi Jira ID."
               >
                 <div className="flex flex-col gap-2">
@@ -427,72 +542,6 @@ export function TimerTab() {
                 >
                   Aggiungi
                 </button>
-              </SettingsSection>
-            </div>
-          )}
-
-          {timerSection === "presets" && (
-            <div className="flex flex-col gap-4">
-              <SettingsSection
-                title="Preset attivi"
-                description="Questi preset compaiono come scorciatoie nel widget del timer."
-              >
-                {presets.length ? (
-                  <div className="flex flex-col gap-2">
-                    {presets.map((preset) => {
-                      const minutesValue = preset / 60;
-                      const minutesLabel = Number.isInteger(minutesValue)
-                        ? `${minutesValue} min`
-                        : `${minutesValue.toFixed(1)} min`;
-                      return (
-                        <div
-                          key={preset}
-                          className="flex items-center justify-between border border-gray-200 rounded px-3 py-2 text-sm"
-                        >
-                          <span className="font-mono">
-                            {formatDuration(preset * 1000)} ({minutesLabel})
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => removePreset(preset)}
-                            disabled={presets.length <= 1}
-                            className="text-red-600 hover:text-red-800 disabled:text-gray-400"
-                          >
-                            Rimuovi
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <p className="text-sm text-gray-500">
-                    Nessun preset configurato.
-                  </p>
-                )}
-              </SettingsSection>
-
-              <SettingsSection
-                title="Nuovo preset"
-                description="Aggiungi un nuovo slot espresso in minuti."
-              >
-                <div className="flex gap-2">
-                  <input
-                    type="number"
-                    min={1}
-                    step={1}
-                    value={newPresetMinutes}
-                    onChange={(e) => setNewPresetMinutes(e.target.value)}
-                    placeholder="Minuti"
-                    className="flex-1 p-2 border border-gray-300 rounded focus:outline-none focus:ring focus:border-blue-500"
-                  />
-                  <button
-                    type="button"
-                    onClick={addPreset}
-                    className="self-start bg-gray-300 hover:bg-gray-400 text-gray-800 font-semibold py-2 px-4 rounded"
-                  >
-                    Aggiungi
-                  </button>
-                </div>
               </SettingsSection>
             </div>
           )}
