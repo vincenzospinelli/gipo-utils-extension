@@ -6,7 +6,8 @@
 - GipoTimer: preset rapidi personalizzabili (es. 5/10/15 minuti) selezionabili dal widget.
 - Nuova sezione Dashboard: cronologia delle sessioni con riepilogo per persona nelle opzioni e totale parlato mostrato nel widget.
 - Impostazioni GipoTimer organizzate in sotto-tab (Timer, Persone, Promemoria, Preset) per una navigazione più pulita.
-- Configurazione GipoWheel suddivisa in tab (Ruota, Partecipanti, Audio) con card a dimensione uniforme tra le sezioni.
+- Configurazione GipoWheel suddivisa in tab (Ruota, Partecipanti, Audio) con card a dimensione uniforme e lista partecipanti in stile GipoTimer.
+- Liste dei partecipanti di Timer e Wheel ora indipendenti (`peopleWithIds` per il timer, `wheelPeople` per la ruota).
 
 ### ♻️ Refactor
 

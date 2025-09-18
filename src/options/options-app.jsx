@@ -370,7 +370,7 @@ function TimerTab() {
               className={timerNavClass("people")}
               onClick={() => setTimerSection("people")}
             >
-              Persone
+              Partecipanti
             </button>
             <button
               type="button"
@@ -786,9 +786,6 @@ function DashboardTab() {
 
 function WheelTab() {
   const [people, setPeople] = useState(DEFAULT_PEOPLE);
-  const [textarea, setTextarea] = useState(
-    DEFAULT_PEOPLE.map((p) => p.name).join("\n")
-  );
   const [winner, setWinner] = useState("");
   const [lastWinner, setLastWinner] = useState(null);
   const [selectedIndex, setSelectedIndex] = useState(-1);
@@ -834,6 +831,35 @@ function WheelTab() {
     showWheelToast();
   };
 
+  const persistWheelPeople = (list) => {
+    writeSyncStorage({wheelPeople: sanitizePeopleList(list)});
+    showWheelToast();
+  };
+
+  const updateWheelPerson = (idx, value) => {
+    setPeople((prev) => {
+      const next = prev.map((p, i) => (i === idx ? {...p, name: value} : p));
+      persistWheelPeople(next);
+      return next;
+    });
+  };
+
+  const addWheelPerson = () => {
+    setPeople((prev) => {
+      const next = [...prev, {name: "", jiraId: ""}];
+      persistWheelPeople(next);
+      return next;
+    });
+  };
+
+  const removeWheelPerson = (idx) => {
+    setPeople((prev) => {
+      const next = prev.filter((_, i) => i !== idx);
+      persistWheelPeople(next);
+      return next.length ? next : [{name: "", jiraId: ""}];
+    });
+  };
+
   const winnerAnimatingRef = useRef(false);
   const winnerPulseRef = useRef(0);
   const TAU = 2 * Math.PI;
@@ -842,16 +868,15 @@ function WheelTab() {
   useEffect(() => {
     let active = true;
     readSyncStorage([
-      "peopleWithIds",
+      "wheelPeople",
       "wheelAudioMuted",
       "wheelAudioVolume",
     ]).then((data) => {
       if (!active) return;
-      const storedPeople = Array.isArray(data.peopleWithIds)
-        ? data.peopleWithIds
+      const storedPeople = Array.isArray(data.wheelPeople)
+        ? data.wheelPeople
         : DEFAULT_PEOPLE;
       setPeople(storedPeople);
-      setTextarea(storedPeople.map((p) => p.name).join("\n"));
       drawWheel(storedPeople.map((p) => p.name));
       const volumeUnit = ensureUnitVolume(data.wheelAudioVolume, 0.1);
       const volumePercent = unitToPercent(volumeUnit);
@@ -880,12 +905,8 @@ function WheelTab() {
   }, [wheelSoundsEnabled, wheelAudioVolume]);
 
   const names = useMemo(
-    () =>
-      textarea
-        .split("\n")
-        .map((n) => n.trim())
-        .filter(Boolean),
-    [textarea]
+    () => people.map((p) => p.name).filter(Boolean),
+    [people]
   );
 
   useEffect(() => {
@@ -1012,11 +1033,9 @@ function WheelTab() {
       if (t >= 1) {
         winnerPulseRef.current = 0;
         winnerAnimatingRef.current = false;
-        const updatedNames = names.filter((n) => n !== selectedPerson);
-        setTextarea(updatedNames.join("\n"));
         const updatedPeople = people.filter((p) => p.name !== selectedPerson);
         setPeople(updatedPeople);
-        writeSyncStorage({peopleWithIds: updatedPeople});
+        persistWheelPeople(updatedPeople);
         setSelectedIndex(-1);
         drawWheel(updatedNames);
         return;
@@ -1048,25 +1067,9 @@ function WheelTab() {
     requestAnimationFrame(animate);
   }
 
-  useEffect(() => {
-    const handle = setTimeout(() => {
-      const updated = names.map((name) => {
-        const found = people.find((p) => p.name === name);
-        return found || {name};
-      });
-      setPeople(updated);
-      writeSyncStorage({peopleWithIds: updated});
-      showWheelToast();
-    }, 300);
-    return () => clearTimeout(handle);
-    // eslint-disable-next-line react-hooks-exhaustive-deps
-  }, [names]);
-
   function onReset() {
     setPeople(DEFAULT_PEOPLE);
-    setTextarea(DEFAULT_PEOPLE.map((p) => p.name).join("\n"));
-    writeSyncStorage({peopleWithIds: DEFAULT_PEOPLE});
-    showWheelToast();
+    persistWheelPeople(DEFAULT_PEOPLE);
     drawWheel(DEFAULT_PEOPLE.map((p) => p.name));
     angleRef.current = 0;
     velRef.current = 0;
@@ -1077,19 +1080,13 @@ function WheelTab() {
   }
 
   function onShuffle() {
-    const arr = [...names];
-    for (let i = arr.length - 1; i > 0; i--) {
+    const shuffled = [...people];
+    for (let i = shuffled.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
-      [arr[i], arr[j]] = [arr[j], arr[i]];
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
     }
-    setTextarea(arr.join("\n"));
-    const shuffledPeople = arr.map(
-      (name) => people.find((p) => p.name === name) || {name}
-    );
-    setPeople(shuffledPeople);
-    writeSyncStorage({peopleWithIds: shuffledPeople});
-    showWheelToast();
-    drawWheel(arr);
+    setPeople(shuffled);
+    persistWheelPeople(shuffled);
   }
 
   function startConfetti() {
@@ -1237,21 +1234,40 @@ function WheelTab() {
             <div className="flex flex-col gap-4">
               <SettingsSection
                 title="Elenco partecipanti"
-                description="Aggiungi o rimuovi nomi dalla ruota. Le modifiche vengono salvate automaticamente."
+                description="Modifica i nomi della ruota. Ogni riga rappresenta una slice."
               >
-                <textarea
-                  id="wheel-person-list"
-                  rows={18}
-                  placeholder="Una persona per riga..."
-                  value={textarea}
-                  onChange={(e) => setTextarea(e.target.value)}
-                  className="w-full p-3 border border-gray-300 rounded focus:outline-none focus:ring focus:border-blue-500"
-                ></textarea>
+                <div className="flex flex-col gap-2">
+                  {people.map((p, i) => (
+                    <div key={i} className="flex gap-2 items-center">
+                      <input
+                        type="text"
+                        placeholder={`Partecipante ${i + 1}`}
+                        value={p.name}
+                        onChange={(e) => updateWheelPerson(i, e.target.value)}
+                        className="flex-1 border border-gray-300 rounded p-2 focus:outline-none focus:ring focus:border-blue-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeWheelPerson(i)}
+                        className="text-red-600 hover:text-red-800 disabled:text-gray-400"
+                      >
+                        Rimuovi
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={addWheelPerson}
+                    className="self-start bg-gray-300 hover:bg-gray-400 text-gray-800 font-semibold py-2 px-4 rounded"
+                  >
+                    Aggiungi
+                  </button>
+                </div>
               </SettingsSection>
 
               <SettingsSection
                 title="Strumenti elenco"
-                description="Gestisci l'ordine dei partecipanti salvati."
+                description="Mischia l'ordine o ripristina l'elenco di default."
               >
                 <div className="flex flex-col gap-2 sm:flex-row">
                   <button
