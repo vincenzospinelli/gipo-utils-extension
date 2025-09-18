@@ -1,3 +1,9 @@
+## [2.1.3] - 2025-09-17
+
+### ✨ Fix
+
+- Corretto un problema che durante l’aggiornamento del plugin causava un redirect alla pagina GitHub.
+
 ## [2.1.2] - 2025-09-17
 
 ### ✨ Nuove funzionalità

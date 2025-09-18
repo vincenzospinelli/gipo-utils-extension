@@ -7,7 +7,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 chrome.runtime.onInstalled.addListener((details) => {
   if (details.reason === "update") {
     chrome.tabs.create({
-      url: "https://github.com/vincenzospinelli/gipo-utils-extension/blob/main/CHNAGELOG.md",
+      url: chrome.runtime.getURL("options/index.html#changelog"),
     });
   }
 });
