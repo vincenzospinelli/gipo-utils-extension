@@ -119,12 +119,17 @@ export function WheelTab() {
         wheelAudioRef.current.volume = !data.wheelAudioMuted ? volumeUnit : 0;
       }
     });
-    const c = confettiCanvasRef.current;
-    if (c) {
-      confettiCtxRef.current = c.getContext("2d");
+    if (typeof document !== "undefined") {
+      const confettiCanvas = document.getElementById("confetti-canvas");
+      if (confettiCanvas) {
+        confettiCanvasRef.current = confettiCanvas;
+        confettiCtxRef.current = confettiCanvas.getContext("2d");
+      }
     }
     return () => {
       active = false;
+      confettiCtxRef.current = null;
+      confettiCanvasRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -137,10 +142,17 @@ export function WheelTab() {
     }
   }, [wheelSoundsEnabled, wheelAudioVolume]);
 
-  const names = useMemo(
-    () => people.map((p) => p.name).filter(Boolean),
-    [people]
-  );
+  const {names, nameIndices} = useMemo(() => {
+    const filledNames = [];
+    const indices = [];
+    people.forEach((person, index) => {
+      if (person.name) {
+        filledNames.push(person.name);
+        indices.push(index);
+      }
+    });
+    return {names: filledNames, nameIndices: indices};
+  }, [people]);
 
   useEffect(() => {
     if (wheelSection !== "general") return;
@@ -220,6 +232,11 @@ export function WheelTab() {
 
   function animate() {
     if (!spinningRef.current) return;
+    if (!names.length) {
+      setSpinning(false);
+      spinningRef.current = false;
+      return;
+    }
     angleRef.current += velRef.current;
     const now = Date.now();
     if (now >= spinEndRef.current) {
@@ -232,6 +249,7 @@ export function WheelTab() {
       const selectedPerson = names[index];
       setWinner(`Il vincitore è ${selectedPerson}!`);
       setSelectedIndex(index);
+      const selectedPeopleIndex = nameIndices[index] ?? -1;
       const centerOfIndex = index * step + step / 2;
       const targetNormalized = (POINTER - centerOfIndex + TAU) % TAU;
       const delta =
@@ -240,13 +258,14 @@ export function WheelTab() {
       startConfetti();
       try {
         if (wheelSoundsEnabled && wheelAudioRef.current) {
+          wheelAudioRef.current.currentTime = 0;
           wheelAudioRef.current.volume = percentToUnit(wheelAudioVolume);
           wheelAudioRef.current.play?.();
         }
       } catch {}
       setLastWinner(selectedPerson);
       lastWinnerRef.current = selectedPerson;
-      startWinnerAnimation(selectedPerson);
+      startWinnerAnimation(selectedPerson, selectedPeopleIndex);
       return;
     } else {
       const rem = Math.max(0, spinEndRef.current - now);
@@ -257,7 +276,7 @@ export function WheelTab() {
     drawWheel(names);
   }
 
-  function startWinnerAnimation(selectedPerson) {
+  function startWinnerAnimation(selectedPerson, selectedPeopleIndex) {
     winnerAnimatingRef.current = true;
     const start = Date.now();
     const duration = 1800;
@@ -267,7 +286,17 @@ export function WheelTab() {
       if (t >= 1) {
         winnerPulseRef.current = 0;
         winnerAnimatingRef.current = false;
-        const updatedPeople = people.filter((p) => p.name !== selectedPerson);
+        const removalIndex =
+          typeof selectedPeopleIndex === "number" && selectedPeopleIndex >= 0
+            ? selectedPeopleIndex
+            : people.findIndex((p) => p.name === selectedPerson);
+        const updatedPeople =
+          removalIndex >= 0
+            ? people.filter((_, i) => i !== removalIndex)
+            : people.filter((p) => p.name !== selectedPerson);
+        const updatedNames = updatedPeople
+          .map((p) => p.name)
+          .filter((name) => name);
         setPeople(updatedPeople);
         persistWheelPeople(updatedPeople);
         setSelectedIndex(-1);
@@ -294,6 +323,12 @@ export function WheelTab() {
     spinningRef.current = true;
     setWinner("");
     setSelectedIndex(-1);
+    const confettiCanvas = confettiCanvasRef.current;
+    const confettiCtx = confettiCtxRef.current;
+    if (confettiCanvas && confettiCtx) {
+      confettiParticlesRef.current = [];
+      confettiCtx.clearRect(0, 0, confettiCanvas.width, confettiCanvas.height);
+    }
     const dur = 3000 + Math.random() * 2000;
     spinDurRef.current = dur;
     spinEndRef.current = Date.now() + dur;
@@ -328,6 +363,9 @@ export function WheelTab() {
     if (!canvas) return;
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
+    const ctx = confettiCtxRef.current || canvas.getContext("2d");
+    if (!ctx) return;
+    confettiCtxRef.current = ctx;
     const particles = Array.from({length: 150}, () => ({
       x: Math.random() * canvas.width,
       y: Math.random() * canvas.height - canvas.height,
@@ -568,6 +606,11 @@ export function WheelTab() {
         </div>
       </div>
       <Toast message={wheelToast} />
+      <audio
+        ref={wheelAudioRef}
+        src={chrome.runtime.getURL("assets/sounds/lose.mp3")}
+        preload="auto"
+      />
     </>
   );
 }
