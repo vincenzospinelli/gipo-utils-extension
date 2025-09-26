@@ -6,13 +6,13 @@ import {
   unitToPercent,
 } from "../../shared/audio";
 import {
-  DEFAULT_PEOPLE,
+  DEFAULT_PEOPLE_WHEEL,
   DEFAULT_WHEEL_CONFETTI_ENABLED,
   DEFAULT_WHEEL_SOUNDS_ENABLED,
   DEFAULT_WHEEL_VOLUME_PERCENT,
   DEFAULT_WHEEL_VOLUME_UNIT,
 } from "../../shared/constants";
-import {sanitizePeopleList} from "../../shared/people";
+import {sanitizePeopleWheelList} from "../../shared/people";
 import {readSyncStorage, writeSyncStorage} from "../../shared/storage";
 import {SettingsSection} from "../components/SettingsSection";
 import {Toast} from "../components/Toast";
@@ -24,7 +24,7 @@ import {
 import {useAutoToast} from "../hooks/useAutoToast";
 
 export function WheelTab() {
-  const [people, setPeople] = useState(DEFAULT_PEOPLE);
+  const [people, setPeople] = useState(DEFAULT_PEOPLE_WHEEL);
   const [winner, setWinner] = useState("");
   const [lastWinner, setLastWinner] = useState(null);
   const [selectedIndex, setSelectedIndex] = useState(-1);
@@ -102,7 +102,7 @@ export function WheelTab() {
   };
 
   const persistWheelPeople = (list) => {
-    writeSyncStorage({wheelPeople: sanitizePeopleList(list)});
+    writeSyncStorage({wheelPeople: sanitizePeopleWheelList(list)});
     showWheelToast();
   };
 
@@ -146,7 +146,7 @@ export function WheelTab() {
       if (!active) return;
       const storedPeople = Array.isArray(data.wheelPeople)
         ? data.wheelPeople
-        : DEFAULT_PEOPLE;
+        : DEFAULT_PEOPLE_WHEEL;
       setPeople(storedPeople);
       drawWheel(storedPeople.map((p) => p.name));
       const volumeUnit = ensureUnitVolume(
@@ -170,7 +170,7 @@ export function WheelTab() {
       }
       const defaultsPayload = {};
       if (!Array.isArray(data.wheelPeople)) {
-        defaultsPayload.wheelPeople = sanitizePeopleList(storedPeople);
+        defaultsPayload.wheelPeople = sanitizePeopleWheelList(storedPeople);
       }
       if (data.wheelAudioVolume === undefined) {
         defaultsPayload.wheelAudioVolume = DEFAULT_WHEEL_VOLUME_UNIT;
@@ -405,9 +405,9 @@ export function WheelTab() {
   }
 
   function onReset() {
-    setPeople(DEFAULT_PEOPLE);
-    persistWheelPeople(DEFAULT_PEOPLE);
-    drawWheel(DEFAULT_PEOPLE.map((p) => p.name));
+    setPeople(DEFAULT_PEOPLE_WHEEL);
+    persistWheelPeople(DEFAULT_PEOPLE_WHEEL);
+    drawWheel(DEFAULT_PEOPLE_WHEEL.map((p) => p.name));
     angleRef.current = 0;
     velRef.current = 0;
     setSpinning(false);

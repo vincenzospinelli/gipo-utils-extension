@@ -1,7 +1,17 @@
-import {DEFAULT_PEOPLE} from "./constants";
+import {DEFAULT_PEOPLE, DEFAULT_PEOPLE_WHEEL} from "./constants";
 
 export const sanitizePeopleList = (list = DEFAULT_PEOPLE) => {
   if (!Array.isArray(list)) return DEFAULT_PEOPLE;
+  return list
+    .filter((item) => item && item.name)
+    .map((item) => ({
+      name: item.name.trim(),
+      jiraId: (item.jiraId || "").trim(),
+    }));
+};
+
+export const sanitizePeopleWheelList = (list = DEFAULT_PEOPLE_WHEEL) => {
+  if (!Array.isArray(list)) return DEFAULT_PEOPLE_WHEEL;
   return list
     .filter((item) => item && item.name)
     .map((item) => ({

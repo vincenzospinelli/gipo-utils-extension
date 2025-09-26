@@ -16,6 +16,21 @@ export const DEFAULT_PEOPLE = [
   {name: "Vincenzo S", jiraId: ""},
 ];
 
+export const DEFAULT_PEOPLE_WHEEL = [
+  {name: "Alessandro M", jiraId: ""},
+  {name: "Claudio B", jiraId: ""},
+  {name: "Diego M", jiraId: ""},
+  {name: "Enrico S", jiraId: ""},
+  {name: "Fede G", jiraId: ""},
+  {name: "Francesco A", jiraId: ""},
+  {name: "Luca M", jiraId: ""},
+  {name: "Matteo T", jiraId: ""},
+  {name: "Nicola L", jiraId: ""},
+  {name: "Roberto M", jiraId: ""},
+  {name: "Stefano S", jiraId: ""},
+  {name: "Vincenzo S", jiraId: ""},
+];
+
 export const MAX_SESSION_HISTORY = 200;
 
 export const DEFAULT_DURATION = 60;
