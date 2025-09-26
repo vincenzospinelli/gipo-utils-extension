@@ -23,7 +23,7 @@ export const DEFAULT_DURATION = 60;
 export const DEFAULT_TIMER_PRESETS = [300, 600, 900];
 export const DEFAULT_TIMER_PRESETS_ENABLED = false;
 
-export const DEFAULT_TIMER_SOUNDS_ENABLED = true;
+export const DEFAULT_TIMER_SOUNDS_ENABLED = false;
 export const DEFAULT_TIMER_VOLUME_PERCENT = 10;
 export const DEFAULT_TIMER_VOLUME_UNIT = 0.1;
 
@@ -32,7 +32,7 @@ export const DEFAULT_REMINDER_ENABLED = true;
 
 export const DEFAULT_TIMER_FILTER_JIRA = false;
 
-export const DEFAULT_WHEEL_SOUNDS_ENABLED = true;
+export const DEFAULT_WHEEL_SOUNDS_ENABLED = false;
 export const DEFAULT_WHEEL_VOLUME_PERCENT = 10;
 export const DEFAULT_WHEEL_VOLUME_UNIT = 0.1;
 
