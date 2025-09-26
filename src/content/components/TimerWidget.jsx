@@ -514,11 +514,13 @@ export function TimerWidget({containerEl, hostEl}) {
   const changePerson = useCallback(
     (delta) => {
       if (!people.length) return;
+      const currentPerson = people[index];
       finalizeSession(false);
       stopTick();
       const nextIndex = (index + delta + people.length) % people.length;
       setIndex(nextIndex);
-      if (filterJiraByUser) changeJiraView(people[nextIndex]);
+      if (filterJiraByUser)
+        changeJiraView(people[nextIndex], {previousPerson: currentPerson});
       setPausedMs(0);
       resetReminderState();
       resetSessionTracking();
@@ -543,7 +545,8 @@ export function TimerWidget({containerEl, hostEl}) {
   const start = useCallback(() => {
     playBeep();
     if (startTime) return;
-    if (filterJiraByUser && people[index]) changeJiraView(people[index]);
+    if (filterJiraByUser && people[index])
+      changeJiraView(people[index], {previousPerson: null});
     if (pausedMs > 0) {
       resetReminderState();
       sessionStartRef.current = Date.now();
