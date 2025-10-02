@@ -16,6 +16,7 @@ export function WheelTab() {
     wheelToast,
     people,
     winner,
+    lastWinner,
     spinning,
     canvasRef,
     wheelAudioRef,
@@ -32,6 +33,7 @@ export function WheelTab() {
     updateWheelPerson,
     addWheelPerson,
     removeWheelPerson,
+    removeWinnerFromRoster,
   } = useWheelSettings();
 
   const [wheelSection, setWheelSection] = useState("general");
@@ -79,11 +81,13 @@ export function WheelTab() {
             <WheelGeneralSection
               canvasRef={canvasRef}
               winner={winner}
+              lastWinner={lastWinner}
               spinning={spinning}
               onSpin={onSpin}
               onShuffle={onShuffle}
               onReset={onReset}
               drawWheel={drawWheel}
+              removeWinnerFromRoster={removeWinnerFromRoster}
             />
           )}
 

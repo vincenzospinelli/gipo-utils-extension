@@ -5,11 +5,13 @@ import {SettingsSection} from "../SettingsSection";
 export function WheelGeneralSection({
   canvasRef,
   winner,
+  lastWinner,
   spinning,
   onSpin,
   onShuffle,
   onReset,
   drawWheel,
+  removeWinnerFromRoster,
 }) {
   useEffect(() => {
     if (canvasRef.current) {
@@ -37,6 +39,20 @@ export function WheelGeneralSection({
           >
             {winner}
           </div>
+          {lastWinner && !spinning && (
+            <div className="mt-3 flex flex-col items-center gap-2">
+              <p className="text-sm text-gray-600 text-center">
+                {`Rimuovi "${lastWinner}" dalla ruota per il prossimo giro.`}
+              </p>
+              <button
+                type="button"
+                onClick={() => removeWinnerFromRoster()}
+                className="bg-blue-200 hover:bg-blue-300 text-blue-800 font-semibold py-2 px-4 rounded"
+              >
+                Rimuovi vincitore
+              </button>
+            </div>
+          )}
         </div>
       </SettingsSection>
 
