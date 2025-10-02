@@ -32,6 +32,15 @@ export function useWheelSettings() {
   const confettiCanvasRef = useRef(null);
   const confettiCtxRef = useRef(null);
   const confettiParticlesRef = useRef([]);
+  const alignmentAnimationRef = useRef(null);
+
+  const cancelAlignment = useCallback(() => {
+    if (alignmentAnimationRef.current) {
+      cancelAnimationFrame(alignmentAnimationRef.current);
+      alignmentAnimationRef.current = null;
+    }
+  }, []);
+
   const wheelAudioRef = useRef(null);
   const winnerAnimatingRef = useRef(false);
   const winnerPulseRef = useRef(0);
@@ -159,22 +168,57 @@ export function useWheelSettings() {
   );
 
   const addWheelPerson = useCallback(() => {
+    cancelAlignment();
     setPeople((prev) => {
       const next = [...prev, {name: "", jiraId: ""}];
       persistWheelPeople(next);
       return next;
     });
-  }, [persistWheelPeople]);
+  }, [cancelAlignment, persistWheelPeople]);
 
   const removeWheelPerson = useCallback(
     (idx) => {
+      cancelAlignment();
       setPeople((prev) => {
         const next = prev.filter((_, index) => index !== idx);
         persistWheelPeople(next);
         return next.length ? next : [{name: "", jiraId: ""}];
       });
     },
-    [persistWheelPeople]
+    [cancelAlignment, persistWheelPeople]
+  );
+
+  const smoothAlignToAngle = useCallback(
+    (targetAngle, namesList, onComplete) => {
+      cancelAlignment();
+      const startAngle = angleRef.current;
+      const deltaAngle = targetAngle - startAngle;
+      const duration = 650;
+      const startTime =
+        typeof performance !== "undefined" ? performance.now() : Date.now();
+
+      const step = (timestamp) => {
+        const now =
+          typeof timestamp === "number"
+            ? timestamp
+            : typeof performance !== "undefined"
+              ? performance.now()
+              : Date.now();
+        const progress = Math.min(1, (now - startTime) / duration);
+        const eased = 1 - Math.pow(1 - progress, 3);
+        angleRef.current = startAngle + deltaAngle * eased;
+        drawWheel(namesList);
+        if (progress < 1) {
+          alignmentAnimationRef.current = requestAnimationFrame(step);
+        } else {
+          alignmentAnimationRef.current = null;
+          onComplete?.();
+        }
+      };
+
+      alignmentAnimationRef.current = requestAnimationFrame(step);
+    },
+    [cancelAlignment, drawWheel]
   );
 
   const updateConfetti = useCallback(() => {
@@ -296,7 +340,8 @@ export function useWheelSettings() {
       const targetNormalized = (POINTER - centerOfIndex + TAU) % TAU;
       const delta =
         ((targetNormalized - normalizedAngle + Math.PI) % TAU) - Math.PI;
-      angleRef.current += delta;
+      const finalAngle = angleRef.current + delta;
+      const namesSnapshot = [...names];
       if (wheelConfettiEnabled) {
         startConfetti();
       }
@@ -309,7 +354,9 @@ export function useWheelSettings() {
       } catch {}
       setLastWinner(selectedPerson);
       lastWinnerRef.current = selectedPerson;
-      startWinnerAnimation(selectedPerson, selectedPeopleIndex);
+      smoothAlignToAngle(finalAngle, namesSnapshot, () =>
+        startWinnerAnimation(selectedPerson, selectedPeopleIndex)
+      );
       return;
     }
     const remaining = Math.max(0, spinEndRef.current - now);
@@ -323,6 +370,7 @@ export function useWheelSettings() {
     drawWheel,
     nameIndices,
     names,
+    smoothAlignToAngle,
     startConfetti,
     startWinnerAnimation,
     wheelAudioVolume,
@@ -332,6 +380,7 @@ export function useWheelSettings() {
 
   const onSpin = useCallback(() => {
     if (winnerAnimatingRef.current) return;
+    cancelAlignment();
     if (names.length < 2) {
       alert("Inserisci almeno due nomi per usare la ruota.");
       return;
@@ -353,9 +402,10 @@ export function useWheelSettings() {
     spinEndRef.current = Date.now() + duration;
     velRef.current = 0.35;
     requestAnimationFrame(animate);
-  }, [animate, names]);
+  }, [animate, cancelAlignment, names]);
 
   const onReset = useCallback(() => {
+    cancelAlignment();
     setPeople(DEFAULT_PEOPLE_WHEEL);
     persistWheelPeople(DEFAULT_PEOPLE_WHEEL);
     drawWheel(DEFAULT_PEOPLE_WHEEL.map((person) => person.name));
@@ -365,9 +415,10 @@ export function useWheelSettings() {
     spinningRef.current = false;
     setLastWinner(null);
     lastWinnerRef.current = null;
-  }, [drawWheel, persistWheelPeople]);
+  }, [cancelAlignment, drawWheel, persistWheelPeople]);
 
   const onShuffle = useCallback(() => {
+    cancelAlignment();
     setPeople((prev) => {
       const shuffled = [...prev];
       for (let index = shuffled.length - 1; index > 0; index--) {
@@ -377,7 +428,7 @@ export function useWheelSettings() {
       persistWheelPeople(shuffled);
       return shuffled;
     });
-  }, [persistWheelPeople]);
+  }, [cancelAlignment, persistWheelPeople]);
 
   const handleWheelToggle = useCallback(
     (enabled) => {
@@ -507,6 +558,8 @@ export function useWheelSettings() {
   useEffect(() => {
     drawWheel();
   }, [drawWheel]);
+
+  useEffect(() => () => cancelAlignment(), [cancelAlignment]);
 
   return {
     wheelToast,
