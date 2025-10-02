@@ -1,3 +1,10 @@
+## [2.1.4] - 2025-10-04
+
+### ✨ Fix
+
+- Wheel: estratto gestito con rimozione manuale.
+- GipoTimer: possibile gestire automaticamente il cambio board di jira (Beta).
+
 ## [2.1.3] - 2025-09-17
 
 ### ✨ Fix
